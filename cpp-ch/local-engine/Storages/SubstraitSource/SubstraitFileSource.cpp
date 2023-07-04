@@ -261,34 +261,41 @@ DB::ColumnPtr FileReaderWrapper::createColumn(const String & value, DB::DataType
 DB::Field FileReaderWrapper::buildFieldFromString(const String & str_value, DB::DataTypePtr type)
 {
     using FieldBuilder = std::function<DB::Field(DB::ReadBuffer &, const String &)>;
-    static std::map<int, FieldBuilder> field_builders
-        = {{magic_enum::enum_integer(DB::TypeIndex::Int8), BUILD_INT_FIELD(Int8)},
-           {magic_enum::enum_integer(DB::TypeIndex::Int16), BUILD_INT_FIELD(Int16)},
-           {magic_enum::enum_integer(DB::TypeIndex::Int32), BUILD_INT_FIELD(Int32)},
-           {magic_enum::enum_integer(DB::TypeIndex::Int64), BUILD_INT_FIELD(Int64)},
-           {magic_enum::enum_integer(DB::TypeIndex::Float32), BUILD_FP_FIELD(DB::Float32)},
-           {magic_enum::enum_integer(DB::TypeIndex::Float64), BUILD_FP_FIELD(DB::Float64)},
-           {magic_enum::enum_integer(DB::TypeIndex::String), [](DB::ReadBuffer &, const String & val) { return DB::Field(val); }},
-           {magic_enum::enum_integer(DB::TypeIndex::Date),
+    static std::map<std::string, FieldBuilder> field_builders
+        = {{"Int8", BUILD_INT_FIELD(Int8)},
+           {"Int16", BUILD_INT_FIELD(Int16)},
+           {"Int32", BUILD_INT_FIELD(Int32)},
+           {"Int64", BUILD_INT_FIELD(Int64)},
+           {"Float32", BUILD_FP_FIELD(DB::Float32)},
+           {"Float64", BUILD_FP_FIELD(DB::Float64)},
+           {"String", [](DB::ReadBuffer &, const String & val) { return DB::Field(val); }},
+           {"Date",
             [](DB::ReadBuffer & in, const String &)
             {
                 DayNum value;
                 readDateText(value, in);
                 return DB::Field(value);
             }},
-           {magic_enum::enum_integer(DB::TypeIndex::Date32),
+           {"Date32",
             [](DB::ReadBuffer & in, const String &)
             {
                 ExtendedDayNum value;
                 readDateText(value, in);
                 return DB::Field(value.toUnderType());
+            }},
+           {"Bool",
+            [](DB::ReadBuffer & in, const String &)
+            {
+                bool value;
+                readBoolTextWord(value, in, true);
+                return DB::Field(value);
             }}};
 
     auto nested_type = DB::removeNullable(type);
     DB::ReadBufferFromString read_buffer(str_value);
-    auto it = field_builders.find(magic_enum::enum_integer(nested_type->getTypeId()));
+    auto it = field_builders.find(nested_type->getName());
     if (it == field_builders.end())
-        throw DB::Exception(DB::ErrorCodes::UNKNOWN_TYPE, "Unsupported data type {}", type->getFamilyName());
+        throw DB::Exception(DB::ErrorCodes::UNKNOWN_TYPE, "Unsupported data type {}", nested_type->getName());
     return it->second(read_buffer, str_value);
 }
 

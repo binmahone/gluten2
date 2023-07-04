@@ -565,10 +565,9 @@
           <configuration>
             <recompileMode>${scala.recompile.mode}</recompileMode>
               <args>
-                <arg>-Wconf:msg=While parsing annotations in:silent</arg>
+                <arg>-Wconf:msg=While parsing annotations in:silent,cat=deprecation:silent</arg>
                 <arg>-Ywarn-unused:imports</arg>
                 <arg>-Xfatal-warnings</arg>
-                <arg>-deprecation</arg>
                 <arg>-feature</arg>
               </args>
           </configuration>

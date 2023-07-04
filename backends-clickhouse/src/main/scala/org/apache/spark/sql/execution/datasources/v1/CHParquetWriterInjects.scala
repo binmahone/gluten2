@@ -14,39 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.v1.nativeparquet
+package org.apache.spark.sql.execution.datasources.v1
 
 import io.glutenproject.vectorized.CHColumnVector
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{CHDatasourceJniWrapper, FakeRow, GlutenParquetFileFormat, OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetUtils
-import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.StructType
 
-import org.apache.hadoop.fs.FileStatus
-import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.parquet.hadoop.codec.CodecConfig
 
-class CHParquetFileFormat
-  extends GlutenParquetFileFormat
-  with DataSourceRegister
-  with Serializable {
+class CHParquetWriterInjects extends GlutenParquetWriterInjectsBase {
 
-  override def inferSchema(
-      sparkSession: SparkSession,
-      options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = {
-    ParquetUtils.inferSchema(sparkSession, options, files)
-  }
-
-  override def prepareWrite(
-      sparkSession: SparkSession,
-      job: Job,
-      options: Map[String, String],
-      dataSchema: StructType): OutputWriterFactory = {
-
+  def createOutputWriterFactory: OutputWriterFactory = {
     new OutputWriterFactory {
       override def getFileExtension(context: TaskAttemptContext): String = {
         CodecConfig.from(context).getCodec.getExtension + ".parquet"
@@ -58,11 +39,13 @@ class CHParquetFileFormat
           context: TaskAttemptContext): OutputWriter = {
 
         val originPath = path
-        val datasourceJniWrapper = new CHDatasourceJniWrapper()
-        val instance = datasourceJniWrapper.nativeInitFileWriterWrapper(path)
+        val datasourceJniWrapper = new CHDatasourceJniWrapper();
+        val instance =
+          datasourceJniWrapper.nativeInitFileWriterWrapper(path, dataSchema.fieldNames);
 
         new OutputWriter {
           override def write(row: InternalRow): Unit = {
+            assert(row.isInstanceOf[FakeRow])
             val nextBatch = row.asInstanceOf[FakeRow].batch
 
             if (nextBatch.numRows > 0) {
@@ -84,7 +67,21 @@ class CHParquetFileFormat
     }
   }
 
-  override def supportBatch(sparkSession: SparkSession, dataSchema: StructType): Boolean = true
+  override def inferSchema: Option[StructType] = {
+    throw new IllegalStateException("CHParquetWriterInjects does not support inferSchema")
+  }
 
-  override def shortName(): String = "native_parquet"
+  override def splitBlockByPartitionAndBucket(
+      row: FakeRow,
+      partitionColIndice: Array[Int],
+      hasBucket: Boolean): CHBlockStripes = {
+    val nextBatch = row.batch
+
+    if (nextBatch.numRows > 0) {
+      val col = nextBatch.column(0).asInstanceOf[CHColumnVector]
+      new CHBlockStripes(
+        CHDatasourceJniWrapper
+          .splitBlockByPartitionAndBucket(col.getBlockAddress, partitionColIndice, hasBucket))
+    } else throw new IllegalStateException
+  }
 }
