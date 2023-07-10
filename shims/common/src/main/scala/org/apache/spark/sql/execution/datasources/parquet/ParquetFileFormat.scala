@@ -59,8 +59,8 @@ import scala.util.{Failure, Try}
 /* -
  * This class is copied from Spark 3.2 and modified for Gluten. \n
  * Gluten should make sure this class is loaded before the original class.
- * If new Spark releases accepts changes and make this class incompatible, we can move this class to shims-spark32,
- * shims-spark33, etc.
+ * If new Spark releases accepts changes and make this class incompatible,
+ * we can move this class to shims-spark32,shims-spark33, etc.
  */
 class ParquetFileFormat extends FileFormat with DataSourceRegister with Logging with Serializable {
   // Hold a reference to the (serializable) singleton instance of ParquetLogRedirector. This

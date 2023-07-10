@@ -28,7 +28,8 @@ public class BlockStripes implements Iterable<BlockStripe> {
 
     public int originBlockNumColumns;
 
-    public BlockStripes(long originBlockAddress, long[] blockAddresses, int[] headingRowIndice, int originBlockNumColumns) {
+    public BlockStripes(long originBlockAddress, long[] blockAddresses,
+                        int[] headingRowIndice, int originBlockNumColumns) {
         this.originBlockAddress = originBlockAddress;
         this.blockAddresses = blockAddresses;
         this.headingRowIndice = headingRowIndice;

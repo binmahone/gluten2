@@ -27,7 +27,7 @@ public class CHDatasourceJniWrapper {
 
   public native void close(long instanceId);
 
-  /*-
+  /* -
    * The input block is already sorted by partition columns + bucket expressions. (check
    * org.apache.spark.sql.execution.datasources.FileFormatWriter#write)
    * However, the input block may contain parts(we call it stripe here) belonging to
@@ -38,8 +38,8 @@ public class CHDatasourceJniWrapper {
    * This function splits the input block in to several blocks, each of which belonging
    * to the same partition/bucket. Notice the stripe will NOT contain partition columns
    *
-   * Since all rows in a stripe share the same partition/bucket, we only need to check the heading row.
-   * So, for each stripe, the native code also returns each stripe's first row's index.
+   * Since all rows in a stripe share the same partition/bucket, we only need to check the heading
+   * row. So, for each stripe, the native code also returns each stripe's first row's index.
    * Caller can use these indice to get UnsafeRows from the input block,
    * to help FileFormatDataWriter to aware partition/bucket changes.
    */
