@@ -31,14 +31,17 @@ import java.util.Iterator;
 
 public class CHBlockStripes extends BlockStripes {
 
-    final private SparkRowInfo sparkRowInfo;
-    final private scala.collection.Iterator<InternalRow> headingRowIter;
+    private final SparkRowInfo sparkRowInfo;
+    private final scala.collection.Iterator<InternalRow> headingRowIter;
     private int index = -1;
 
     public CHBlockStripes(BlockStripes bs) {
-        super(bs.originBlockAddress, bs.blockAddresses, bs.headingRowIndice, bs.originBlockNumColumns);
-        sparkRowInfo = CHBlockConverterJniWrapper.convertColumnarToRow(originBlockAddress, headingRowIndice);
-        headingRowIter = CHExecUtil.getRowIterFromSparkRowInfo(sparkRowInfo, originBlockNumColumns, headingRowIndice.length);
+        super(bs.originBlockAddress, bs.blockAddresses,
+                bs.headingRowIndice, bs.originBlockNumColumns);
+        sparkRowInfo = CHBlockConverterJniWrapper.convertColumnarToRow(
+                originBlockAddress, headingRowIndice);
+        headingRowIter = CHExecUtil.getRowIterFromSparkRowInfo(
+                sparkRowInfo, originBlockNumColumns, headingRowIndice.length);
     }
 
     @Override

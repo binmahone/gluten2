@@ -17,21 +17,21 @@
 package org.apache.spark.sql.execution.datasources;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /*-
  * BlockStripe is used in writing partitioned/bucketed table.
  * BlockStripe is part of block belonging to same partition/bucket
  */
-abstract public class BlockStripe {
+public abstract class BlockStripe {
 
     public BlockStripe() {
     }
 
     // get the columnar batch of this block stripe
-    abstract public ColumnarBatch getColumnarBatch();
+    public abstract ColumnarBatch getColumnarBatch();
 
-    abstract public InternalRow getHeadingRow();
+    public abstract InternalRow getHeadingRow();
 }
 

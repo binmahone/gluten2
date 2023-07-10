@@ -162,7 +162,8 @@ class GlutenClickHouseWriteParquetTableSuite()
     spark.sql(s"drop table IF EXISTS $parquet_table_name")
 
     //    spark.sql(
-    //      ("insert overwrite local directory '/tmp/destination' stored as parquet select string_field,int_field,long_field,float_field," +
+    //      ("insert overwrite local directory '/tmp/destination'
+    //      stored as parquet select string_field,int_field,long_field,float_field," +
     //        "double_field,short_field,byte_field,bool_field,decimal_field" +
     //        " from tmp_t").format(table_name))
 
