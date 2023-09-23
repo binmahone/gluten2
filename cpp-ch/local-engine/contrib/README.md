@@ -1,0 +1,1 @@
+1. [xsimd](https://github.com/xtensor-stack/xsimd/archive/refs/tags/10.0.0.tar.gz)

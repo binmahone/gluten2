@@ -38,6 +38,8 @@ set(LOCALENGINE_SHARED_LIB ch)
 set (ENABLE_CURL_BUILD OFF)
 
 add_subdirectory(proto)
+add_subdirectory (contrib EXCLUDE_FROM_ALL)
+add_subdirectory(dwio)
 
 add_headers_and_sources(builder Builder)
 add_headers_and_sources(join Join)
