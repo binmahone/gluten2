@@ -1,10 +1,14 @@
 set(LIBEVENT_ROOT_DIR "${GLUTEN_CONTRIB_DIR}/libevent")
 set(LIBEVENT_BINARY_DIR "${GLUTEN_CONTRIB_BINARY_DIR}/libevent")
 
-set(EVENT__LIBRARY_TYPE STATIC)
+set(EVENT__LIBRARY_TYPE STATIC CACHE STRING "Build libevent as static library")
 set(EVENT__HAVE_KQUEUE OFF)
+set(EVENT__DISABLE_OPENSSL ON CACHE STRING "Disable OpenSSL support")
+set(EVENT__DISABLE_BENCHMARK ON CACHE STRING "Disable benchmark")
+set(EVENT__DISABLE_TESTS ON CACHE STRING "Disable tests")
+set(EVENT__DISABLE_REGRESS ON CACHE STRING "Disable regress")
+set(EVENT__DISABLE_SAMPLES ON CACHE STRING "Disable samples")
 add_subdirectory("${LIBEVENT_ROOT_DIR}" "${LIBEVENT_BINARY_DIR}")
-
 target_compile_options(event_core_static PRIVATE
         -Wno-keyword-macro
         -Wno-reserved-macro-identifier
