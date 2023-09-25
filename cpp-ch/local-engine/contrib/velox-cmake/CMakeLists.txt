@@ -81,6 +81,7 @@ set(FOLLY_BINARY_DIR "${GLUTEN_CONTRIB_BINARY_DIR}/folly")
 
 ## TODO: why check failed?
 set(FOLLY_HAVE_OPENSSL_ASN1_TIME_DIFF ON)
+set(FOLLY_CPP_ATOMIC_BUILTIN ON)
 set(FOLLY_HAVE_WEAK_SYMBOLS 1)
 add_subdirectory("${VELOX_ROOT_DIR}/CMake/resolve_dependency_modules/folly" "${FOLLY_BINARY_DIR}")
 
