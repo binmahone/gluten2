@@ -57,6 +57,24 @@ target_compile_options(
         -Wno-cast-align                         # xsimd
 )
 target_link_libraries(gluten_dwio_parquet_reader_example PRIVATE
+        gluten_velox_flag_definitions
+        gluten_velox_test_util
+
+        gluten_velox_exception
+        gluten_velox_process
+        gluten_velox_common_base
+        gluten_velox_file
+        gluten_velox_serialization
+        gluten_velox_common_compression
+
+        gluten_velox_vector
+        gluten_velox_type
+        gluten_velox_time
+        gluten_velox_memory
+
+        gluten_dwio_common_exception
         gluten_dwio_common
         gluten_dwio_native_parquet_reader
+        gluten_dwio_parquet_thrift
+
 )

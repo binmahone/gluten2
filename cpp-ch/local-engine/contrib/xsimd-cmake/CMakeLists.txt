@@ -62,6 +62,8 @@ set(XSIMD_HEADERS
 
 add_library(_xsimd INTERFACE)
 target_include_directories(_xsimd INTERFACE $<BUILD_INTERFACE:${XSIMD_INCLUDE_DIR}>)
-
+target_compile_options(_xsimd INTERFACE
+        -Wno-cast-align                         # xsimd
+)
 
 add_library(ch_contrib::xsimd ALIAS _xsimd)

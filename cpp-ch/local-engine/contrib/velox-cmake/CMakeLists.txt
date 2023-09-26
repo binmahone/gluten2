@@ -41,7 +41,6 @@ target_compile_options(gflags_nothreads_static PRIVATE
         -Wno-unreachable-code
         -Wno-unused-member-function
 )
-
 target_compile_options(gflags_static PRIVATE
         -Wno-zero-as-null-pointer-constant
         -Wno-format-nonliteral
@@ -52,7 +51,6 @@ target_compile_options(gflags_static PRIVATE
         -Wno-unreachable-code
         -Wno-unused-member-function
 )
-
 target_compile_options(glogbase PRIVATE
         -Wno-format-nonliteral
         -Wno-zero-as-null-pointer-constant
@@ -75,6 +73,20 @@ target_compile_options(glogbase PRIVATE
         -Wno-old-style-cast
 )
 
+
+add_library(_glog_remove_warning INTERFACE)  # only for remove waring
+target_compile_options(_glog_remove_warning INTERFACE
+        -Wno-reserved-macro-identifier
+        -Wno-reserved-identifier
+        -Wno-deprecated-dynamic-exception-spec
+        -Wno-suggest-override                   # glog
+        -Wno-zero-as-null-pointer-constant      # glog
+        -Wno-suggest-destructor-override        # glog
+        -Wno-sign-compare                       # glog
+)
+# target_link_libraries(_glog_remove_warning INTERFACE glog::glog)
+add_library(ch_contrib::glog_compile_option ALIAS _glog_remove_warning)
+
 # folly
 list(PREPEND CMAKE_MODULE_PATH ${WRAP_VELOX_CMAKE})
 set(FOLLY_BINARY_DIR "${GLUTEN_CONTRIB_BINARY_DIR}/folly")
@@ -85,9 +97,238 @@ set(FOLLY_CPP_ATOMIC_BUILTIN ON)
 set(FOLLY_HAVE_WEAK_SYMBOLS 1)
 add_subdirectory("${VELOX_ROOT_DIR}/CMake/resolve_dependency_modules/folly" "${FOLLY_BINARY_DIR}")
 
-#TODO: How to transfer to the other target?
+add_library(_folly_compile_options INTERFACE)
+target_compile_options(_folly_compile_options INTERFACE
+        -Wno-unknown-warning-option             # folly/Utility.h           => FOLLY_GNU_DISABLE_WARNING("-Wmaybe-uninitialized")
+        -Wno-comma                              # folly/Traits.h
+        -Wno-deprecated                         # folly/lang/StaticConst.h
+        -Wno-old-style-cast                     # folly/lang/SafeAssert.h
+        -Wno-undef                              # folly                     => __cpp_lib_atomic_ref
+        -Wno-documentation                      # folly
+        -Wno-cast-qual                          # folly/FBVector.h
+        -Wno-thread-safety-analysis             # folly
+        -Wno-covered-switch-default             # folly
+        -Wno-extra-semi-stmt                    # folly
+)
+target_link_libraries(_folly_compile_options INTERFACE Folly::folly ch_contrib::glog_compile_option)
+add_library(ch_contrib::folly ALIAS _folly_compile_options)
+
+#TODO: Why and How to transfer to the other target?
+include_directories(SYSTEM "${VELOX_ROOT_DIR}/velox")
 include_directories(${VELOX_ROOT_DIR})
 
+# velox warning
+add_library(_velox_remove_warning INTERFACE)  # only for remove waring
+target_compile_options(_velox_remove_warning INTERFACE
+        -Wno-gnu-zero-variadic-macro-arguments  # velox                     => __VA_ARGS__
+        -Wno-shadow-uncaptured-local            # velox
+        -Wno-shorten-64-to-32                   # velox
+        -Wno-gnu-statement-expression-from-macro-expansion # velox
+        -Wno-sign-compare                       # velox
+        -Wno-shadow-field-in-constructor        # velox
+        -Wno-gnu-statement-expression           # velox
+        -Wno-undefined-reinterpret-cast         # velox
+        -Wno-inconsistent-missing-destructor-override   # velox
+        -Wno-shadow-field-in-constructor        # velox
+        -Wno-unused-parameter                   # velox
+        -Wno-missing-noreturn                   # velox
+        -Wno-shadow                             # velox
+        -Wno-nullability-completeness           # velox
+        -Wno-extra-semi                         # velox
+        -Wno-float-conversion                   # velox
+        -Wno-nullable-to-nonnull-conversion     # velox
+        -Wno-shadow-field                       # velox
+        -Wno-implicit-float-conversion          # velox
+        -Wno-unused-member-function             # velox
+        # dwio_common
+        -Wno-unreachable-code-return            # velox
+        -Wno-unused-variable                    # velox
+        -Wno-format-nonliteral                  # velox
+        -Wno-ignored-qualifiers                 # velox
+        -Wno-mismatched-tags                    # velox
+        # native_parquet_reader
+        -Wno-unused-but-set-variable            # velox
+        -Wno-unused-private-field               # velox
+        -Wno-macro-redefined                    # conflict with glog
+)
+target_link_libraries(_velox_remove_warning INTERFACE
+        ch_contrib::folly
+        ch_contrib::xsimd
+)
+add_library(ch_contrib::velox_compile_option ALIAS _velox_remove_warning)
+
+################################
+#    velox targets             #
+################################
+
+# gluten_velox_test_util
+set(VELOX_TEST_UTIL_DIR "${VELOX_ROOT_DIR}/velox/common/testutil")
+add_library(gluten_velox_test_util ${VELOX_TEST_UTIL_DIR}/TestValue.cpp)
+target_link_libraries(gluten_velox_test_util ch_contrib::velox_compile_option)
+# gluten_velox_flag_definitions
+set(VELOX_FLAG_DIR "${VELOX_ROOT_DIR}/velox/flag_definitions")
+add_library(gluten_velox_flag_definitions OBJECT ${VELOX_FLAG_DIR}/flags.cpp)
+target_link_libraries(gluten_velox_flag_definitions gflags::gflags)
+
+# gluten_velox_common_compression
+set(VELOX_COMMON_COMPRESSION_DIR "${VELOX_ROOT_DIR}/velox/common/compression")
+add_library(gluten_velox_common_compression
+        ${VELOX_COMMON_COMPRESSION_DIR}/Compression.cpp
+        ${VELOX_COMMON_COMPRESSION_DIR}/LzoDecompressor.cpp
+)
+target_link_libraries(gluten_velox_common_compression ch_contrib::velox_compile_option)
+# gluten_velox_process
+set(VELOX_PROCESS_DIR "${VELOX_ROOT_DIR}/velox/common/process")
+add_library(gluten_velox_process
+        ${VELOX_PROCESS_DIR}/ProcessBase.cpp
+        ${VELOX_PROCESS_DIR}/StackTrace.cpp
+        ${VELOX_PROCESS_DIR}/ThreadDebugInfo.cpp
+        ${VELOX_PROCESS_DIR}/TraceContext.cpp
+)
+target_link_libraries(gluten_velox_process ch_contrib::folly)
+# gluten_velox_exception
+set(VELOX_BASE_DIR "${VELOX_ROOT_DIR}/velox/common/base")
+add_library(gluten_velox_exception
+        ${VELOX_BASE_DIR}/Exceptions.cpp
+        ${VELOX_BASE_DIR}/VeloxException.cpp
+        ${VELOX_BASE_DIR}/Exceptions.h
+)
+target_compile_options(gluten_velox_exception PRIVATE
+        -Wno-unused-exception-parameter
+)
+target_link_libraries(gluten_velox_exception ch_contrib::folly)
+
+# gluten_velox_serialization
+set(VELOX_SERIALIZATION_DIR "${VELOX_ROOT_DIR}/velox/common/serialization")
+add_library(gluten_velox_serialization ${VELOX_SERIALIZATION_DIR}/DeserializationRegistry.cpp)
+target_link_libraries(gluten_velox_serialization ch_contrib::velox_compile_option)
+# gluten_velox_common_base
+add_library(gluten_velox_common_base
+        ${VELOX_BASE_DIR}/BitUtil.cpp
+        ${VELOX_BASE_DIR}/Counters.cpp
+        ${VELOX_BASE_DIR}/Fs.cpp
+        ${VELOX_BASE_DIR}/RandomUtil.cpp
+        ${VELOX_BASE_DIR}/RawVector.cpp
+        ${VELOX_BASE_DIR}/RuntimeMetrics.cpp
+        ${VELOX_BASE_DIR}/SimdUtil.cpp
+        ${VELOX_BASE_DIR}/StatsReporter.cpp
+        ${VELOX_BASE_DIR}/SuccinctPrinter.cpp
+)
+target_compile_options(gluten_velox_common_base PRIVATE
+        -Wno-unused-function
+)
+target_link_libraries(gluten_velox_common_base ch_contrib::velox_compile_option)
+# gluten_velox_file
+set(VELOX_FILE_DIR "${VELOX_ROOT_DIR}/velox/common/file")
+add_library(gluten_velox_file
+        ${VELOX_FILE_DIR}/File.cpp
+        ${VELOX_FILE_DIR}/FileSystems.cpp
+        ${VELOX_FILE_DIR}/Utils.cpp
+)
+target_link_libraries(gluten_velox_file ch_contrib::velox_compile_option)
+# gluten_velox_time +1
+set(VELOX_TIME_DIR "${VELOX_ROOT_DIR}/velox/common/time")
+add_library(gluten_velox_time
+        ${VELOX_TIME_DIR}/Timer.cpp
+        ${VELOX_TIME_DIR}/CpuWallTimer.cpp
+)
+target_link_libraries(gluten_velox_time ch_contrib::folly)
+
+# gluten_velox_encode -1
+set(VELOX_ENCODER_DIR "${VELOX_ROOT_DIR}/velox/common/encode")
+add_library(gluten_velox_encode ${VELOX_ENCODER_DIR}/Base64.cpp)
+target_link_libraries(gluten_velox_encode ch_contrib::folly)
+################################################################
+
+# gluten_velox_memory
+set(VELOX_MEMORY_DIR "${VELOX_ROOT_DIR}/velox/common/memory")
+add_library(
+        gluten_velox_memory
+        ${VELOX_MEMORY_DIR}/Allocation.cpp
+        ${VELOX_MEMORY_DIR}/AllocationPool.cpp
+        ${VELOX_MEMORY_DIR}/ByteStream.cpp
+        ${VELOX_MEMORY_DIR}/HashStringAllocator.cpp
+        ${VELOX_MEMORY_DIR}/MallocAllocator.cpp
+        ${VELOX_MEMORY_DIR}/Memory.cpp
+        ${VELOX_MEMORY_DIR}/MemoryAllocator.cpp
+        ${VELOX_MEMORY_DIR}/MemoryArbitrator.cpp
+        ${VELOX_MEMORY_DIR}/MemoryPool.cpp
+        ${VELOX_MEMORY_DIR}/MmapAllocator.cpp
+        ${VELOX_MEMORY_DIR}/MmapArena.cpp
+        ${VELOX_MEMORY_DIR}/SharedArbitrator.cpp
+        ${VELOX_MEMORY_DIR}/StreamArena.cpp
+)
+target_compile_options(gluten_velox_memory PRIVATE
+        -Wno-unused-exception-parameter
+        -Wno-conditional-uninitialized
+        -Wno-return-type
+)
+target_link_libraries(gluten_velox_memory
+        ch_contrib::velox_compile_option
+        ch_contrib::re2
+)
+
+# gluten_velox_type
+set(DWIO_TYPE_DIR "${VELOX_ROOT_DIR}/velox/type")
+add_library(
+        gluten_velox_type
+        ${DWIO_TYPE_DIR}/Conversions.cpp
+        ${DWIO_TYPE_DIR}/DecimalUtil.cpp
+        ${DWIO_TYPE_DIR}/DoubleUtil.cpp
+        ${DWIO_TYPE_DIR}/Filter.cpp
+        ${DWIO_TYPE_DIR}/HugeInt.cpp
+        ${DWIO_TYPE_DIR}/StringView.h
+        ${DWIO_TYPE_DIR}/Subfield.cpp
+        ${DWIO_TYPE_DIR}/Timestamp.cpp
+        ${DWIO_TYPE_DIR}/TimestampConversion.cpp
+        ${DWIO_TYPE_DIR}/Tokenizer.cpp
+        ${DWIO_TYPE_DIR}/Type.cpp
+        ${DWIO_TYPE_DIR}/Variant.cpp
+)
+target_link_libraries(gluten_velox_type PRIVATE
+        gluten_velox_encode
+        boost::headers_only
+        ch_contrib::velox_compile_option
+        ch_contrib::re2
+)
+
+# gluten_velox_vector
+set(VELOX_VECTOR_DIR "${VELOX_ROOT_DIR}/velox/vector")
+add_library(gluten_velox_vector
+        ${VELOX_VECTOR_DIR}/BaseVector.cpp
+        ${VELOX_VECTOR_DIR}/ComplexVector.cpp
+        ${VELOX_VECTOR_DIR}/ConstantVector.cpp
+        ${VELOX_VECTOR_DIR}/DecodedVector.cpp
+        ${VELOX_VECTOR_DIR}/FlatVector.cpp
+        ${VELOX_VECTOR_DIR}/LazyVector.cpp
+        ${VELOX_VECTOR_DIR}/SelectivityVector.cpp
+        ${VELOX_VECTOR_DIR}/SequenceVector.cpp
+        ${VELOX_VECTOR_DIR}/VectorSaver.cpp
+        ${VELOX_VECTOR_DIR}/VectorEncoding.cpp
+        ${VELOX_VECTOR_DIR}/VectorPool.cpp
+        ${VELOX_VECTOR_DIR}/VectorPrinter.cpp
+        ${VELOX_VECTOR_DIR}/VectorStream.cpp
+        ${VELOX_VECTOR_DIR}/VariantToVector.cpp
+)
+target_compile_options(gluten_velox_vector PRIVATE
+        -Wno-conditional-uninitialized
+)
+target_link_libraries(gluten_velox_vector
+        boost::headers_only
+        ch_contrib::velox_compile_option
+)
+
+################################
+# DWIO                         #
+################################
+
+# gluten_dwio_common_exception
+set(DWIO_COMMON_EXCEPTION_DIR "${VELOX_ROOT_DIR}/velox/dwio/common/exception")
+add_library(gluten_dwio_common_exception
+        ${DWIO_COMMON_EXCEPTION_DIR}/Exception.cpp
+        ${DWIO_COMMON_EXCEPTION_DIR}/Exceptions.cpp
+)
+target_link_libraries(gluten_dwio_common_exception ch_contrib::velox_compile_option)
 # gluten_dwio_common
 set(DWIO_COMMON_DIR "${VELOX_ROOT_DIR}/velox/dwio/common")
 add_library(
@@ -124,58 +365,24 @@ add_library(
         ${DWIO_COMMON_DIR}/TypeWithId.cpp
         ${DWIO_COMMON_DIR}/WriterFactory.cpp
 )
-target_compile_options(
-        gluten_dwio_common PRIVATE
-        -Wno-shadow-uncaptured-local
-        -Wno-shorten-64-to-32
-        -Wno-reserved-macro-identifier
-        -Wno-undef
-        -Wno-comma
-        -Wno-reserved-identifier
-        -Wno-deprecated
-        -Wno-old-style-cast
-        -Wno-zero-as-null-pointer-constant
-        -Wno-suggest-override
-        -Wno-extra-semi-stmt
-        -Wno-unknown-warning-option
-        -Wno-documentation
-        -Wno-suggest-destructor-override
-        -Wno-gnu-zero-variadic-macro-arguments
-        -Wno-gnu-statement-expression-from-macro-expansion
-        -Wno-unused-parameter
-        -Wno-cast-align
-        -Wno-nullable-to-nonnull-conversion
-        -Wno-shadow
-        -Wno-unused-variable
-        -Wno-sign-compare
-        -Wno-cast-qual
-        -Wno-gnu-statement-expression
-        -Wno-extra-semi
-        -Wno-inconsistent-missing-destructor-override
-        -Wno-undefined-reinterpret-cast
-        -Wno-covered-switch-default
-        -Wno-thread-safety-analysis
-        -Wno-nullability-completeness
-        -Wno-missing-noreturn
-        -Wno-shadow-field
-        -Wno-ignored-qualifiers
-        -Wno-implicit-float-conversion
-        -Wno-unused-member-function
-        -Wno-mismatched-tags
-        -Wno-float-conversion
-)
 target_link_libraries(
         gluten_dwio_common
-        Folly::folly
+        ch_contrib::velox_compile_option
         ch_contrib::fmt
         ch_contrib::protobuf
-        ch_contrib::xsimd
+)
+
+# gluten_dwio_parquet_thrift
+set(PARQUET_THRIFT_DIR "${VELOX_ROOT_DIR}/velox/dwio/parquet/thrift")
+add_library(gluten_dwio_parquet_thrift ${PARQUET_THRIFT_DIR}/ParquetThriftTypes.cpp)
+target_link_libraries(gluten_dwio_parquet_thrift
+        ch_contrib::thrift
+        ch_contrib::velox_compile_option  # 简化警告处理，后续可以考虑移除
 )
 
 # gluten_dwio_native_parquet_reader
 set(PARQUET_READER_DIR "${VELOX_ROOT_DIR}/velox/dwio/parquet/reader")
-add_library(
-        gluten_dwio_native_parquet_reader
+add_library(gluten_dwio_native_parquet_reader
         ${PARQUET_READER_DIR}/NestedStructureDecoder.cpp
         ${PARQUET_READER_DIR}/ParquetReader.cpp
         ${PARQUET_READER_DIR}/ParquetTypeWithId.cpp
@@ -188,58 +395,11 @@ add_library(
         ${PARQUET_READER_DIR}/StructColumnReader.cpp
         ${PARQUET_READER_DIR}/StringColumnReader.cpp
 )
-target_compile_options(
-        gluten_dwio_native_parquet_reader PRIVATE
-        -Wno-shadow-uncaptured-local
-        -Wno-shorten-64-to-32
-        -Wno-reserved-macro-identifier
-        -Wno-undef
-        -Wno-comma
-        -Wno-reserved-identifier
-        -Wno-deprecated
-        -Wno-old-style-cast
-        -Wno-zero-as-null-pointer-constant
-        -Wno-suggest-override
-        -Wno-extra-semi-stmt
-        -Wno-unknown-warning-option
-        -Wno-documentation
-        -Wno-suggest-destructor-override
-        -Wno-gnu-zero-variadic-macro-arguments
-        -Wno-gnu-statement-expression-from-macro-expansion
-        -Wno-unused-parameter
-        -Wno-cast-align
-        -Wno-nullable-to-nonnull-conversion
-        -Wno-shadow
-        -Wno-unused-variable
-        -Wno-sign-compare
-        -Wno-cast-qual
-        -Wno-gnu-statement-expression
-        -Wno-extra-semi
-        -Wno-inconsistent-missing-destructor-override
-        -Wno-undefined-reinterpret-cast
-        -Wno-covered-switch-default
-        -Wno-thread-safety-analysis
-        -Wno-nullability-completeness
-        -Wno-missing-noreturn
-        -Wno-shadow-field
-        -Wno-ignored-qualifiers
-        -Wno-implicit-float-conversion
-        -Wno-unused-member-function
-        -Wno-mismatched-tags
-        -Wno-float-conversion
-        #
-        -Wno-unused-private-field
-        -Wno-unused-but-set-variable
-        -Wno-macro-redefined
-        -Wno-unreachable-code-return
-)
-target_link_libraries(
-        gluten_dwio_native_parquet_reader
-        Folly::folly
+target_link_libraries(gluten_dwio_native_parquet_reader
+        ch_contrib::velox_compile_option
         ch_contrib::fmt
         ch_contrib::parquet
         ch_contrib::protobuf
-        ch_contrib::xsimd
         ch_contrib::lz4
         ch_contrib::zstd
         ch_contrib::snappy
