@@ -1,4 +1,4 @@
-set(VELOX_ROOT_DIR "/home/chang/OpenSource/velox" CACHE PATH "Velox root directory")
+set(VELOX_ROOT_DIR "/home/chang/SourceCode/velox" CACHE PATH "Velox root directory")
 
 # Sets new behavior for CMP0135, which controls how timestamps are extracted
 # when using ExternalProject_Add():
@@ -30,6 +30,10 @@ if(NOT TARGET gflags::gflags)
     add_library(gflags::gflags ALIAS gflags_gflags)
 endif()
 resolve_dependency(glog)
+
+# fix
+target_include_directories (glogbase BEFORE PUBLIC
+        $<TARGET_PROPERTY:glog,INCLUDE_DIRECTORIES>)
 
 target_compile_options(gflags_nothreads_static PRIVATE
         -Wno-zero-as-null-pointer-constant
@@ -321,7 +325,20 @@ target_link_libraries(gluten_velox_vector
 ################################
 # DWIO                         #
 ################################
-
+# gluten_dwio_common_compression
+set(DWIO_COMMON_COMPRESSION_DIR "${VELOX_ROOT_DIR}/velox/dwio/common/compression")
+add_library(gluten_dwio_common_compression
+        ${DWIO_COMMON_COMPRESSION_DIR}/Compression.cpp
+        ${DWIO_COMMON_COMPRESSION_DIR}/PagedInputStream.cpp
+        ${DWIO_COMMON_COMPRESSION_DIR}/PagedOutputStream.cpp
+)
+target_link_libraries(gluten_dwio_common_compression
+        ch_contrib::velox_compile_option
+        ch_contrib::protobuf
+        ch_contrib::lz4
+        ch_contrib::zstd
+        ch_contrib::snappy
+)
 # gluten_dwio_common_exception
 set(DWIO_COMMON_EXCEPTION_DIR "${VELOX_ROOT_DIR}/velox/dwio/common/exception")
 add_library(gluten_dwio_common_exception
@@ -340,10 +357,10 @@ add_library(
         ${DWIO_COMMON_DIR}/CacheInputStream.cpp
         ${DWIO_COMMON_DIR}/ColumnSelector.cpp
         ${DWIO_COMMON_DIR}/DataBufferHolder.cpp
-        ${DWIO_COMMON_DIR}/DataSink.cpp
         ${DWIO_COMMON_DIR}/DecoderUtil.cpp
         ${DWIO_COMMON_DIR}/DirectDecoder.cpp
         ${DWIO_COMMON_DIR}/DwioMetricsLog.cpp
+        ${DWIO_COMMON_DIR}/FileSink.cpp
         ${DWIO_COMMON_DIR}/FlatMapHelper.cpp
         ${DWIO_COMMON_DIR}/InputStream.cpp
         ${DWIO_COMMON_DIR}/IntDecoder.cpp
@@ -364,6 +381,11 @@ add_library(
         ${DWIO_COMMON_DIR}/TypeUtils.cpp
         ${DWIO_COMMON_DIR}/TypeWithId.cpp
         ${DWIO_COMMON_DIR}/WriterFactory.cpp
+        ${DWIO_COMMON_DIR}/SortingWriter.cpp
+        ${DWIO_COMMON_DIR}/SortingWriter.h
+)
+target_compile_options(gluten_dwio_common PRIVATE
+        -Wno-unused-exception-parameter
 )
 target_link_libraries(
         gluten_dwio_common

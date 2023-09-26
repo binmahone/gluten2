@@ -74,7 +74,7 @@ target_link_libraries(gluten_dwio_parquet_reader_example PRIVATE
 
         gluten_dwio_common_exception
         gluten_dwio_common
+        gluten_dwio_common_compression
         gluten_dwio_native_parquet_reader
         gluten_dwio_parquet_thrift
-
 )
