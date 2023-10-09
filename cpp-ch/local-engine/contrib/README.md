@@ -14,7 +14,10 @@
 
 # TODO
 
-- [ ] folly 需要搞成自动化
-- [ ] 编译配置的说明
+- [x] folly 需要搞成自动化
+
+- [x] 编译配置的说明
+
+  一定要用 OPEN_SSL!!!!
 
 ![image-20231009003031493](./doc/image/cmake.png)
