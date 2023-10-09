@@ -101,6 +101,10 @@ set(FOLLY_CPP_ATOMIC_BUILTIN ON)
 set(FOLLY_HAVE_WEAK_SYMBOLS 1)
 add_subdirectory("${VELOX_ROOT_DIR}/CMake/resolve_dependency_modules/folly" "${FOLLY_BINARY_DIR}")
 
+add_library(_folly_workaround INTERFACE)
+target_include_directories(_folly_workaround INTERFACE "${GLUTEN_CONTRIB_DIR}/folly/workaround")
+target_link_libraries( folly_deps INTERFACE _folly_workaround)
+
 add_library(_folly_compile_options INTERFACE)
 target_compile_options(_folly_compile_options INTERFACE
         -Wno-unknown-warning-option             # folly/Utility.h           => FOLLY_GNU_DISABLE_WARNING("-Wmaybe-uninitialized")
