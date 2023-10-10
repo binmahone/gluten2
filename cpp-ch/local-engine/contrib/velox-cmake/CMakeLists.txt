@@ -1,4 +1,4 @@
-set(VELOX_ROOT_DIR "/home/chang/SourceCode/velox" CACHE PATH "Velox root directory")
+set(VELOX_ROOT_DIR "/data0/hongbin/code/gluten-velox/velox-chenchang" CACHE PATH "Velox root directory")
 
 # Sets new behavior for CMP0135, which controls how timestamps are extracted
 # when using ExternalProject_Add():
@@ -325,6 +325,81 @@ target_link_libraries(gluten_velox_vector
         boost::headers_only
         ch_contrib::velox_compile_option
 )
+
+
+
+# gluten_velox_type_calculation
+set(VELOX_TYPE_CALC_DIR "${VELOX_ROOT_DIR}/velox/expression/type_calculation")
+find_package(BISON 3.0.4 REQUIRED)
+find_package(FLEX 2.5.13 REQUIRED)
+
+bison_target(
+  TypeCalculationParser ${VELOX_TYPE_CALC_DIR}/TypeCalculation.yy
+  ${CMAKE_CURRENT_BINARY_DIR}/TypeCalculation.yy.cc
+  DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/TypeCalculation.yy.h)
+
+flex_target(
+  TypeCalculationScanner ${VELOX_TYPE_CALC_DIR}/TypeCalculation.ll
+  ${CMAKE_CURRENT_BINARY_DIR}/Scanner.cpp COMPILE_FLAGS "-Cf --prefix=veloxtc")
+
+add_flex_bison_dependency(TypeCalculationScanner TypeCalculationParser)
+
+include_directories(${PROJECT_BINARY_DIR})
+include_directories(${FLEX_INCLUDE_DIRS})
+
+add_library(
+  gluten_velox_type_calculation
+  ${BISON_TypeCalculationParser_OUTPUTS} ${FLEX_TypeCalculationScanner_OUTPUTS}
+  ${VELOX_TYPE_CALC_DIR}/Scanner.h ${VELOX_TYPE_CALC_DIR}/TypeCalculation.h)
+target_link_libraries(gluten_velox_type_calculation gluten_velox_common_base)
+
+# gluten_velox_expression_functions
+
+set(VELOX_EXPR_DIR "${VELOX_ROOT_DIR}/velox/expression")
+add_library(
+  gluten_velox_expression_functions 
+  ${VELOX_EXPR_DIR}/FunctionSignature.cpp 
+  ${VELOX_EXPR_DIR}/SignatureBinder.cpp
+  ${VELOX_EXPR_DIR}/ReverseSignatureBinder.cpp)
+
+target_link_libraries(gluten_velox_expression_functions gluten_velox_common_base
+                      gluten_velox_type_calculation)
+
+# gluten_velox_expression
+
+add_library(
+  gluten_velox_expression
+  ${VELOX_EXPR_DIR}/BooleanMix.cpp
+  ${VELOX_EXPR_DIR}/CastExpr.cpp
+  ${VELOX_EXPR_DIR}/CoalesceExpr.cpp
+  ${VELOX_EXPR_DIR}/ConjunctExpr.cpp
+  ${VELOX_EXPR_DIR}/ConstantExpr.cpp
+  ${VELOX_EXPR_DIR}/EvalCtx.cpp
+  ${VELOX_EXPR_DIR}/Expr.cpp
+  ${VELOX_EXPR_DIR}/ExprCompiler.cpp
+  ${VELOX_EXPR_DIR}/ExprToSubfieldFilter.cpp
+  ${VELOX_EXPR_DIR}/FieldReference.cpp
+  ${VELOX_EXPR_DIR}/FunctionCallToSpecialForm.cpp
+  ${VELOX_EXPR_DIR}/LambdaExpr.cpp
+  ${VELOX_EXPR_DIR}/VectorFunction.cpp
+  ${VELOX_EXPR_DIR}/RegisterSpecialForm.cpp
+  ${VELOX_EXPR_DIR}/RowConstructor.cpp
+  ${VELOX_EXPR_DIR}/SimpleFunctionRegistry.cpp
+  ${VELOX_EXPR_DIR}/SpecialFormRegistry.cpp
+  ${VELOX_EXPR_DIR}/SwitchExpr.cpp
+  ${VELOX_EXPR_DIR}/TryExpr.cpp
+  ${VELOX_EXPR_DIR}/GenericWriter.cpp
+  ${VELOX_EXPR_DIR}/PeeledEncoding.cpp)
+
+target_link_libraries(
+  gluten_velox_expression
+  #velox_core 
+  gluten_velox_vector 
+  gluten_velox_common_base
+  gluten_velox_expression_functions
+  #velox_functions_util
+  )
+
 
 ################################
 # DWIO                         #
