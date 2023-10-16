@@ -6,6 +6,8 @@
 #include "velox/parse/ExpressionsParser.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
 #include "velox/expression/Expr.h"
+#include "velox/parse/TypeResolver.h"
+#include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::common;
@@ -57,6 +59,9 @@ core::TypedExprPtr parseExpr(
 
 int main(int /*argc*/, char** /*argv*/) {
 
+  functions::prestosql::registerAllScalarFunctions("");
+  parse::registerTypeResolver();
+   
   const std::string sample("/home/hongbin/code/gluten-velox/velox-chenchang/velox/dwio/parquet/tests/examples/sample.parquet");
   ReaderOptions reader_options{defaultPool.get()};
   ParquetReader reader = createReader(sample, reader_options);
@@ -69,9 +74,8 @@ int main(int /*argc*/, char** /*argv*/) {
   parse::ParseOptions options;
   core::QueryCtx query_ctx;
   exec::SimpleExpressionEvaluator evaluator(&query_ctx, defaultPool.get());
-   auto filter_expr = parseExpr("a > 5", schema, options, defaultPool.get());
-    auto [subfield, subfieldFilter] =
-        exec::toSubfieldFilter(filter_expr, &evaluator);
+  auto filter_expr = parseExpr("a > 5", schema, options, defaultPool.get());
+  auto [subfield, subfieldFilter] = exec::toSubfieldFilter(filter_expr, &evaluator);
   scan_spec->childByName("a")->setFilter(std::move(subfieldFilter));
 
 
@@ -84,9 +88,15 @@ int main(int /*argc*/, char** /*argv*/) {
   std::cout << "returened: " << returned << '\n';
   total += result->size();
   std::cout << total << '\n';
+
   returned  = row_reader->next(1000, result);
   std::cout << "returened: " << returned << '\n';
+  total += result->size();
+  std::cout << total << '\n';
+
   returned  = row_reader->next(1000, result);
   std::cout << "returened: " << returned << '\n';
+  total += result->size();
+  std::cout << total << '\n';
   return 0;
 }

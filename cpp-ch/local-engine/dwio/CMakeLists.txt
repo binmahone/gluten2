@@ -73,6 +73,8 @@ target_link_libraries(gluten_dwio_parquet_reader_example PRIVATE
         gluten_velox_time
         gluten_velox_memory
         gluten_velox_expression
+        gluten_velox_parse_parser
+        gluten_velox_functions_prestosql
 
         gluten_dwio_common_exception
         gluten_dwio_common
