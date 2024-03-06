@@ -93,6 +93,7 @@ class GlutenClickHouseMergeTreeWriteSuite
                  |)
                  |USING clickhouse
                  |LOCATION '$basePath/lineitem_mergetree'
+                 |TBLPROPERTIES('lowCardKey'='l_returnflag,l_linestatus')
                  |""".stripMargin)
 
     spark.sql(s"""

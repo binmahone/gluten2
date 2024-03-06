@@ -113,6 +113,20 @@ class ClickHouseTableV2(
     }
   }
 
+  lazy val lowCardKeyOption: Option[Seq[String]] = {
+    val tableProperties = properties()
+    if (tableProperties.containsKey("lowCardKey")) {
+      if (tableProperties.get("lowCardKey").nonEmpty) {
+        val orderByKes = tableProperties.get("lowCardKey").split(",").map(_.trim).toSeq
+        Some(orderByKes)
+      } else {
+        None
+      }
+    } else {
+      None
+    }
+  }
+
   lazy val orderByKeyOption: Option[Seq[String]] = {
     if (bucketOption.isDefined && bucketOption.get.sortColumnNames.nonEmpty) {
       val orderByKes = bucketOption.get.sortColumnNames
@@ -240,6 +254,7 @@ class ClickHouseTableV2(
       tableName,
       Seq.empty[Attribute],
       orderByKeyOption,
+      lowCardKeyOption,
       primaryKeyOption,
       clickhouseTableConfigs,
       partitionColumns)
