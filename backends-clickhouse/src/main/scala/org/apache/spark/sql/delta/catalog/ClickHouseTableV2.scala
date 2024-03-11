@@ -117,8 +117,15 @@ class ClickHouseTableV2(
     val tableProperties = properties()
     if (tableProperties.containsKey("lowCardKey")) {
       if (tableProperties.get("lowCardKey").nonEmpty) {
-        val orderByKes = tableProperties.get("lowCardKey").split(",").map(_.trim).toSeq
-        Some(orderByKes)
+        val lowCardKeys = tableProperties.get("lowCardKey").split(",").map(_.trim).toSeq
+        lowCardKeys.foreach(
+          s => {
+            if (s.contains(".")) {
+              throw new IllegalStateException(
+                s"lowCardKey $s can not contain '.' (not support nested column yet)")
+            }
+          })
+        Some(lowCardKeys.map(s => s.toLowerCase()))
       } else {
         None
       }
