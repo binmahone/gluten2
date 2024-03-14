@@ -26,6 +26,8 @@
 
 #include "MergeTreeRelParser.h"
 
+#include <Processors/QueryPlan/ExpressionStep.h>
+
 
 namespace DB
 {
@@ -35,7 +37,6 @@ extern const int NO_SUCH_DATA_PART;
 extern const int LOGICAL_ERROR;
 extern const int UNKNOWN_FUNCTION;
 extern const int UNKNOWN_TYPE;
-
 }
 }
 
@@ -99,7 +100,7 @@ MergeTreeRelParser::parseReadRel(
     DB::QueryPlanPtr query_plan,
     const substrait::ReadRel & rel,
     const substrait::ReadRel::ExtensionTable & extension_table,
-    std::list<const substrait::Rel *> & /*rel_stack_*/)
+    std::list<const substrait::Rel *> & rel_stack_)
 {
     google::protobuf::StringValue table;
     table.ParseFromString(extension_table.detail().value());
@@ -153,7 +154,7 @@ MergeTreeRelParser::parseReadRel(
     {
         NonNullableColumnsResolver non_nullable_columns_resolver(input, *getPlanParser(), rel.filter());
         non_nullable_columns = non_nullable_columns_resolver.resolve();
-        query_info->prewhere_info = parsePreWhereInfo(rel.filter(), input);
+        query_info->prewhere_info = parsePreWhereInfo(rel.filter(), input, rel_stack_);
     }
 
     std::vector<DataPartPtr> selected_parts = storage_factory.getDataParts(table_id, merge_tree_table.getPartNames());
@@ -162,7 +163,8 @@ MergeTreeRelParser::parseReadRel(
         throw Exception(ErrorCodes::NO_SUCH_DATA_PART, "no data part found.");
     auto read_step = query_context.custom_storage_merge_tree->reader.readFromParts(
         selected_parts,
-        /* alter_conversions = */ {},
+        /* alter_conversions = */
+        {},
         names_and_types_list.getNames(),
         query_context.storage_snapshot,
         *query_info,
@@ -172,10 +174,26 @@ MergeTreeRelParser::parseReadRel(
     query_context.custom_storage_merge_tree->wrapRangesInDataParts(*reinterpret_cast<ReadFromMergeTree *>(read_step.get()), ranges);
     steps.emplace_back(read_step.get());
     query_plan->addStep(std::move(read_step));
+
+    if (rel.has_filter())
+    {
+        ActionsDAGPtr project = std::make_shared<ActionsDAG>(query_plan->getCurrentDataStream().header.getNamesAndTypesList());
+        NamesWithAliases project_cols;
+        for (const auto & col : names_and_types_list)
+        {
+            project_cols.emplace_back(NameWithAlias(col.name, col.name));
+        }
+        project->project(project_cols);
+        QueryPlanStepPtr project_step = std::make_unique<ExpressionStep>(query_plan->getCurrentDataStream(), project);
+        project_step->setStepDescription("Reorder ReadFromMergeTree Output");
+        steps.emplace_back(project_step.get());
+        query_plan->addStep(std::move(project_step));
+    }
+
     if (!non_nullable_columns.empty())
     {
         auto input_header = query_plan->getCurrentDataStream().header;
-        std::erase_if(non_nullable_columns, [input_header](auto item) -> bool { return !input_header.has(item); });
+        std::erase_if(non_nullable_columns, [&input_header](auto item) -> bool { return !input_header.has(item); });
         auto * remove_null_step = getPlanParser()->addRemoveNullableStep(*query_plan, non_nullable_columns);
         if (remove_null_step)
             steps.emplace_back(remove_null_step);
@@ -183,7 +201,10 @@ MergeTreeRelParser::parseReadRel(
     return query_plan;
 }
 
-PrewhereInfoPtr MergeTreeRelParser::parsePreWhereInfo(const substrait::Expression & rel, Block & input)
+PrewhereInfoPtr MergeTreeRelParser::parsePreWhereInfo(
+    const substrait::Expression & rel,
+    Block & input,
+    std::list<const substrait::Rel *> & rel_stack_)
 {
     std::string filter_name;
     auto prewhere_info = std::make_shared<PrewhereInfo>();
@@ -192,8 +213,36 @@ PrewhereInfoPtr MergeTreeRelParser::parsePreWhereInfo(const substrait::Expressio
     prewhere_info->need_filter = true;
     prewhere_info->remove_prewhere_column = true;
     prewhere_info->prewhere_actions->projectInput(false);
-    for (const auto & name : input.getNames())
-        prewhere_info->prewhere_actions->tryRestoreColumn(name);
+    if (rel_stack_.size() > 0 && rel_stack_.back()->has_project())
+    {
+        std::set<int> used_cols;
+        getUsedColumnsInBaseSchema(used_cols, *rel_stack_.back(), input.columns());
+        auto name_and_types = input.getNamesAndTypes();
+        for (size_t i = 0; i < input.columns(); i++)
+        {
+            if (used_cols.find(i) != used_cols.end())
+            {
+                prewhere_info->prewhere_actions->tryRestoreColumn(name_and_types.at(i).name);
+            }
+            else
+            {
+                auto & type = name_and_types.at(i).type;
+                const auto & dummy_node = prewhere_info->prewhere_actions->addColumn(
+                    ColumnWithTypeAndName(
+                        type->createColumnConstWithDefaultValue(1),
+                        type,
+                        name_and_types.at(i).name));
+                prewhere_info->prewhere_actions->addOrReplaceInOutputs(dummy_node);
+            }
+        }
+    }
+    else
+    {
+        for (const auto & name : input.getNames())
+        {
+            prewhere_info->prewhere_actions->tryRestoreColumn(name);
+        }
+    }
     return prewhere_info;
 }
 
@@ -204,7 +253,10 @@ DB::ActionsDAGPtr MergeTreeRelParser::optimizePrewhereAction(const substrait::Ex
     analyzeExpressions(res, rel, pk_positions, block);
 
     Int64 min_valid_pk_pos = -1;
-    for (auto pk_pos : pk_positions)
+    /// E.g., if the primary key is (a, b, c) but the condition is a = 1 and c = 1,
+    /// we should only put (a = 1) to the tail of PREWHERE,
+    /// and treat (c = 1) as a normal column.
+    for (auto pk_pos : pk_positions) // notice that pk_positions is sorted in std::set
     {
         if (pk_pos != min_valid_pk_pos + 1)
             break;
@@ -242,7 +294,7 @@ DB::ActionsDAGPtr MergeTreeRelParser::optimizePrewhereAction(const substrait::Ex
         filter_action->addOrReplaceInOutputs(*and_function);
     }
 
-    filter_action->removeUnusedActions(Names{filter_name}, false, true);
+    filter_action->removeUnusedActions(Names{filter_name}, true, true);
     return filter_action;
 }
 
@@ -259,7 +311,10 @@ void MergeTreeRelParser::parseToAction(ActionsDAGPtr & filter_action, const subs
 }
 
 void MergeTreeRelParser::analyzeExpressions(
-    Conditions & res, const substrait::Expression & rel, std::set<Int64> & pk_positions, Block & block)
+    Conditions & res,
+    const substrait::Expression & rel,
+    std::set<Int64> & pk_positions,
+    Block & block)
 {
     if (rel.has_scalar_function() && getCHFunctionName(rel.scalar_function()) == "and")
     {
@@ -371,5 +426,4 @@ String MergeTreeRelParser::getCHFunctionName(const substrait::Expression_ScalarF
         throw Exception(ErrorCodes::UNKNOWN_FUNCTION, "Unsupported substrait function on mergetree prewhere parser: {}", func_name);
     return it->second;
 }
-
 }

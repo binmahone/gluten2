@@ -24,82 +24,92 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-extern const int LOGICAL_ERROR;
-}
+    namespace ErrorCodes
+    {
+        extern const int LOGICAL_ERROR;
+    }
 }
 
 namespace local_engine
 {
-using namespace DB;
+    using namespace DB;
 
-class MergeTreeRelParser : public RelParser
-{
-public:
-    static std::shared_ptr<CustomStorageMergeTree> parseStorage(
-        const substrait::Rel & rel_,
-        const substrait::ReadRel::ExtensionTable & extension_table,
-        ContextMutablePtr context);
-
-    explicit MergeTreeRelParser(
-        SerializedPlanParser * plan_paser_, ContextPtr & context_, QueryContext & query_context_, ContextMutablePtr & global_context_)
-        : RelParser(plan_paser_), context(context_), query_context(query_context_), global_context(global_context_)
+    class MergeTreeRelParser : public RelParser
     {
-    }
+    public:
+        static std::shared_ptr<CustomStorageMergeTree> parseStorage(
+            const substrait::Rel& rel_,
+            const substrait::ReadRel::ExtensionTable& extension_table,
+            ContextMutablePtr context);
 
-    ~MergeTreeRelParser() override = default;
+        explicit MergeTreeRelParser(
+            SerializedPlanParser* plan_paser_, ContextPtr& context_, QueryContext& query_context_,
+            ContextMutablePtr& global_context_)
+            : RelParser(plan_paser_), context(context_), query_context(query_context_), global_context(global_context_)
+        {
+        }
 
-    DB::QueryPlanPtr
-    parse(DB::QueryPlanPtr query_plan, const substrait::Rel & rel, std::list<const substrait::Rel *> & rel_stack_) override
-    {
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeTreeRelParser can't call parse(), call parseReadRel instead.");
-    }
+        ~MergeTreeRelParser() override = default;
 
-    DB::QueryPlanPtr
-    parseReadRel(
-        DB::QueryPlanPtr query_plan,
-        const substrait::ReadRel & read_rel,
-        const substrait::ReadRel::ExtensionTable & extension_table,
-        std::list<const substrait::Rel *> & rel_stack_);
+        DB::QueryPlanPtr
+        parse(DB::QueryPlanPtr query_plan, const substrait::Rel& rel,
+              std::list<const substrait::Rel*>& rel_stack_) override
+        {
+            throw Exception(ErrorCodes::LOGICAL_ERROR,
+                            "MergeTreeRelParser can't call parse(), call parseReadRel instead.");
+        }
 
-    const substrait::Rel & getSingleInput(const substrait::Rel &) override
-    {
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeTreeRelParser can't call getSingleInput().");
-    }
+        DB::QueryPlanPtr
+        parseReadRel(
+            DB::QueryPlanPtr query_plan,
+            const substrait::ReadRel& read_rel,
+            const substrait::ReadRel::ExtensionTable& extension_table,
+            std::list<const substrait::Rel*>& rel_stack_);
 
-    struct Condition
-    {
-        explicit Condition(const substrait::Expression & node_) : node(node_) { }
+        const substrait::Rel& getSingleInput(const substrait::Rel&) override
+        {
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeTreeRelParser can't call getSingleInput().");
+        }
 
-        const substrait::Expression node;
-        size_t columns_size = 0;
-        NameSet table_columns;
-        Int64 min_position_in_primary_key = std::numeric_limits<Int64>::max() - 1;
+        struct Condition
+        {
+            explicit Condition(const substrait::Expression& node_) : node(node_)
+            {
+            }
 
-        auto tuple() const { return std::make_tuple(-min_position_in_primary_key, columns_size, table_columns.size()); }
+            const substrait::Expression node;
+            size_t columns_size = 0;
+            NameSet table_columns;
+            Int64 min_position_in_primary_key = std::numeric_limits<Int64>::max() - 1;
 
-        bool operator<(const Condition & rhs) const { return tuple() < rhs.tuple(); }
+            auto tuple() const
+            {
+                return std::make_tuple(-min_position_in_primary_key, columns_size, table_columns.size());
+            }
+
+            bool operator<(const Condition& rhs) const { return tuple() < rhs.tuple(); }
+        };
+
+        using Conditions = std::list<Condition>;
+
+        // visable for test
+        void analyzeExpressions(Conditions& res, const substrait::Expression& rel, std::set<Int64>& pk_positions,
+                                Block& block);
+
+    public:
+        std::unordered_map<std::string, UInt64> column_sizes;
+
+    private:
+        void parseToAction(ActionsDAGPtr& filter_action, const substrait::Expression& rel, std::string& filter_name);
+        PrewhereInfoPtr parsePreWhereInfo(const substrait::Expression& rel, Block& input,
+                                          std::list<const substrait::Rel*>& rel_stack_);
+        ActionsDAGPtr optimizePrewhereAction(const substrait::Expression& rel, std::string& filter_name, Block& block);
+        String getCHFunctionName(const substrait::Expression_ScalarFunction& substrait_func);
+        void collectColumns(const substrait::Expression& rel, NameSet& columns, Block& block);
+        UInt64 getColumnsSize(const NameSet& columns);
+
+        ContextPtr& context;
+        QueryContext& query_context;
+        ContextMutablePtr& global_context;
     };
-    using Conditions = std::list<Condition>;
-
-    // visable for test
-    void analyzeExpressions(Conditions & res, const substrait::Expression & rel, std::set<Int64> & pk_positions, Block & block);
-
-public:
-    std::unordered_map<std::string, UInt64> column_sizes;
-
-private:
-    void parseToAction(ActionsDAGPtr & filter_action, const substrait::Expression & rel, std::string & filter_name);
-    PrewhereInfoPtr parsePreWhereInfo(const substrait::Expression & rel, Block & input);
-    ActionsDAGPtr optimizePrewhereAction(const substrait::Expression & rel, std::string & filter_name, Block & block);
-    String getCHFunctionName(const substrait::Expression_ScalarFunction & substrait_func);
-    void collectColumns(const substrait::Expression & rel, NameSet & columns, Block & block);
-    UInt64 getColumnsSize(const NameSet & columns);
-
-    ContextPtr & context;
-    QueryContext & query_context;
-    ContextMutablePtr & global_context;
-};
-
 }

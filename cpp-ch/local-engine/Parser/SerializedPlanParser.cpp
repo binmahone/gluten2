@@ -511,8 +511,7 @@ QueryPlanPtr SerializedPlanParser::parseOp(const substrait::Rel & rel, std::list
                     extension_table = parseExtensionTable(split_infos.at(nextSplitInfoIndex()));
 
                 MergeTreeRelParser mergeTreeParser(this, context, query_context, global_context);
-                std::list<const substrait::Rel *> stack;
-                query_plan = mergeTreeParser.parseReadRel(std::make_unique<QueryPlan>(), read, extension_table, stack);
+                query_plan = mergeTreeParser.parseReadRel(std::make_unique<QueryPlan>(), read, extension_table, rel_stack);
                 steps = mergeTreeParser.getSteps();
             }
             break;

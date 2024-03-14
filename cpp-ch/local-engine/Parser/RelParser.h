@@ -29,81 +29,110 @@
 #include <google/protobuf/repeated_field.h>
 #include <substrait/extensions/extensions.pb.h>
 #include <substrait/plan.pb.h>
+
 namespace local_engine
 {
-/// parse a single substrait relation
-class RelParser
-{
-public:
-    explicit RelParser(SerializedPlanParser * plan_parser_) : plan_parser(plan_parser_) { }
+    /// parse a single substrait relation
+    class RelParser
+    {
+    public:
+        explicit RelParser(SerializedPlanParser* plan_parser_) : plan_parser(plan_parser_)
+        {
+        }
 
-    virtual ~RelParser() = default;
-    virtual DB::QueryPlanPtr
-    parse(DB::QueryPlanPtr current_plan_, const substrait::Rel & rel, std::list<const substrait::Rel *> & rel_stack_)
+        virtual ~RelParser() = default;
+        virtual DB::QueryPlanPtr
+        parse(DB::QueryPlanPtr current_plan_, const substrait::Rel& rel, std::list<const substrait::Rel*>& rel_stack_)
         = 0;
-    virtual DB::QueryPlanPtr parseOp(const substrait::Rel & rel, std::list<const substrait::Rel *> & rel_stack);
-    virtual const substrait::Rel & getSingleInput(const substrait::Rel & rel) = 0;
-    const std::vector<IQueryPlanStep *> & getSteps() const { return steps; }
+        virtual DB::QueryPlanPtr parseOp(const substrait::Rel& rel, std::list<const substrait::Rel*>& rel_stack);
+        virtual const substrait::Rel& getSingleInput(const substrait::Rel& rel) = 0;
+        const std::vector<IQueryPlanStep*>& getSteps() const { return steps; }
 
-    static AggregateFunctionPtr getAggregateFunction(
-        const String & name, DB::DataTypes arg_types, DB::AggregateFunctionProperties & properties, const DB::Array & parameters = {});
+        static AggregateFunctionPtr getAggregateFunction(
+            const String& name, DB::DataTypes arg_types, DB::AggregateFunctionProperties& properties,
+            const DB::Array& parameters = {});
 
-protected:
-    inline SerializedPlanParser * getPlanParser() { return plan_parser; }
-    inline ContextPtr getContext() { return plan_parser->context; }
+    protected:
+        inline SerializedPlanParser* getPlanParser() { return plan_parser; }
+        inline ContextPtr getContext() { return plan_parser->context; }
 
-    inline String getUniqueName(const std::string & name) { return plan_parser->getUniqueName(name); }
+        inline String getUniqueName(const std::string& name) { return plan_parser->getUniqueName(name); }
 
-    inline const std::unordered_map<std::string, std::string> & getFunctionMapping() { return plan_parser->function_mapping; }
-    // Get function signature name.
-    std::optional<String> parseSignatureFunctionName(UInt32 function_ref);
-    // Get coresponding function name in ClickHouse.
-    std::optional<String> parseFunctionName(UInt32 function_ref, const substrait::Expression_ScalarFunction & function);
+        inline const std::unordered_map<std::string, std::string>& getFunctionMapping()
+        {
+            return plan_parser->function_mapping;
+        }
 
-    const DB::ActionsDAG::Node * parseArgument(ActionsDAGPtr action_dag, const substrait::Expression & rel)
+        // Get function signature name.
+        std::optional<String> parseSignatureFunctionName(UInt32 function_ref);
+        // Get coresponding function name in ClickHouse.
+        std::optional<String> parseFunctionName(UInt32 function_ref,
+                                                const substrait::Expression_ScalarFunction& function);
+
+        const DB::ActionsDAG::Node* parseArgument(ActionsDAGPtr action_dag, const substrait::Expression& rel)
+        {
+            return plan_parser->parseExpression(action_dag, rel);
+        }
+
+        const DB::ActionsDAG::Node* parseExpression(ActionsDAGPtr action_dag, const substrait::Expression& rel)
+        {
+            return plan_parser->parseExpression(action_dag, rel);
+        }
+
+        DB::ActionsDAGPtr expressionsToActionsDAG(const std::vector<substrait::Expression>& expressions,
+                                                  const DB::Block& header)
+        {
+            return plan_parser->expressionsToActionsDAG(expressions, header, header);
+        }
+
+        std::pair<DataTypePtr, Field> parseLiteral(const substrait::Expression_Literal& literal)
+        {
+            return plan_parser->parseLiteral(literal);
+        }
+
+        // collect all steps for metrics
+        std::vector<IQueryPlanStep*> steps;
+
+        const ActionsDAG::Node*
+        buildFunctionNode(ActionsDAGPtr action_dag, const String& function,
+                          const DB::ActionsDAG::NodeRawConstPtrs& args)
+        {
+            return plan_parser->toFunctionNode(action_dag, function, args);
+        }
+
+        static std::map<std::string, std::string> parseFormattedRelAdvancedOptimization(
+            const substrait::extensions::AdvancedExtension& advanced_extension);
+        static std::string getStringConfig(const std::map<std::string, std::string>& configs, const std::string& key,
+                                           const std::string& default_value = "");
+
+        static void getUsedColumnsInBaseSchema(std::set<int>& ret, const substrait::Rel& rel, int num_of_base_columns);
+
+    private:
+        SerializedPlanParser* plan_parser;
+        static void getUsedColumnsInBaseSchema(
+            std::set<int>& ret,
+            const substrait::Expression& rel,
+            int num_of_base_columns);
+        static void getUsedColumnsInBaseSchema(
+            std::set<int>& ret,
+            const substrait::Expression_ScalarFunction& scalar_function,
+            int num_of_base_columns);
+    };
+
+    class RelParserFactory
     {
-        return plan_parser->parseExpression(action_dag, rel);
-    }
+    protected:
+        RelParserFactory() = default;
 
-    const DB::ActionsDAG::Node * parseExpression(ActionsDAGPtr action_dag, const substrait::Expression & rel)
-    {
-        return plan_parser->parseExpression(action_dag, rel);
-    }
-    DB::ActionsDAGPtr expressionsToActionsDAG(const std::vector<substrait::Expression> & expressions, const DB::Block & header)
-    {
-        return plan_parser->expressionsToActionsDAG(expressions, header, header);
-    }
-    std::pair<DataTypePtr, Field> parseLiteral(const substrait::Expression_Literal & literal) { return plan_parser->parseLiteral(literal); }
-    // collect all steps for metrics
-    std::vector<IQueryPlanStep *> steps;
+    public:
+        using RelParserBuilder = std::function<std::shared_ptr<RelParser>(SerializedPlanParser*)>;
+        static RelParserFactory& instance();
+        void registerBuilder(UInt32 k, RelParserBuilder builder);
+        RelParserBuilder getBuilder(UInt32 k);
 
-    const ActionsDAG::Node *
-    buildFunctionNode(ActionsDAGPtr action_dag, const String & function, const DB::ActionsDAG::NodeRawConstPtrs & args)
-    {
-        return plan_parser->toFunctionNode(action_dag, function, args);
-    }
+    private:
+        std::map<UInt32, RelParserBuilder> builders;
+    };
 
-    static std::map<std::string, std::string> parseFormattedRelAdvancedOptimization(const substrait::extensions::AdvancedExtension &advanced_extension);
-    static std::string getStringConfig(const std::map<std::string, std::string> & configs, const std::string & key, const std::string & default_value = "");
-
-private:
-    SerializedPlanParser * plan_parser;
-};
-
-class RelParserFactory
-{
-protected:
-    RelParserFactory() = default;
-
-public:
-    using RelParserBuilder = std::function<std::shared_ptr<RelParser>(SerializedPlanParser *)>;
-    static RelParserFactory & instance();
-    void registerBuilder(UInt32 k, RelParserBuilder builder);
-    RelParserBuilder getBuilder(UInt32 k);
-
-private:
-    std::map<UInt32, RelParserBuilder> builders;
-};
-
-void registerRelParsers();
+    void registerRelParsers();
 }
