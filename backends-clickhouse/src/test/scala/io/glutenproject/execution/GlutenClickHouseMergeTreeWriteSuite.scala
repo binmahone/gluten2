@@ -1155,9 +1155,6 @@ class GlutenClickHouseMergeTreeWriteSuite
           addFiles.map(_.rows).sum
             == 600572)
     }
-
-    println("byby")
-    scala.io.StdIn.readLine()
   }
 
   test("test mergetree CTAS complex") {

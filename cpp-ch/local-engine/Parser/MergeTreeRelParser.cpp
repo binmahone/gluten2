@@ -174,18 +174,6 @@ MergeTreeRelParser::parseReadRel(
         context->getSettingsRef().max_block_size,
         1);
 
-    if (rel.has_filter())
-    {
-        const ActionsDAGPtr actions_dag = std::make_shared<ActionsDAG>(names_and_types_list);
-        const ActionsDAG::Node * filter_node = parseExpression(actions_dag, rel.filter());
-        actions_dag->addOrReplaceInOutputs(*filter_node);
-        assert(filter_node == &(actions_dag->findInOutputs(filter_node->result_name)));
-
-        ReadFromMergeTree * source_step = dynamic_cast<ReadFromMergeTree *>(read_step.get());
-        source_step->addFilter(actions_dag, filter_node->result_name);
-        source_step->SourceStepWithFilter::applyFilters();
-    }
-
     query_context.custom_storage_merge_tree->wrapRangesInDataParts(*reinterpret_cast<ReadFromMergeTree *>(read_step.get()), ranges);
     steps.emplace_back(read_step.get());
     query_plan->addStep(std::move(read_step));
