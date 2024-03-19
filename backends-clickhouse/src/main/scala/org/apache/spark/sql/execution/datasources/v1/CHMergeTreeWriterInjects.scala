@@ -93,7 +93,7 @@ class CHMergeTreeWriterInjects extends GlutenFormatWriterInjectsBase {
       partitionColumns,
       ConverterUtils.convertNamedStructJson(tableSchema),
       clickhouseTableConfigs,
-      dataSchema
+      tableSchema.toAttributes
     )
 
     val datasourceJniWrapper = new CHDatasourceJniWrapper()

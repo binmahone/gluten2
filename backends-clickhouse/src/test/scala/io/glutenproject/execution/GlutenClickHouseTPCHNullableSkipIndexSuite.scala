@@ -33,9 +33,9 @@ class GlutenClickHouseTPCHNullableSkipIndexSuite extends GlutenClickHouseTPCHAbs
       .set("spark.io.compression.codec", "SNAPPY")
       .set("spark.sql.shuffle.partitions", "5")
       .set("spark.sql.autoBroadcastJoinThreshold", "10MB")
-      .set("spark.ui.enabled", "true")
-      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.dump_pipeline", "true")
-      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.logger.level", "debug")
+//      .set("spark.ui.enabled", "true")
+//      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.dump_pipeline", "true")
+//      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.logger.level", "debug")
   }
 
   test("test simple minmax index") {
@@ -187,7 +187,6 @@ class GlutenClickHouseTPCHNullableSkipIndexSuite extends GlutenClickHouseTPCHAbs
   }
 
 
-  // since we overwrite makeOutputNullable in ClickhouseOptimisticTransaction
   test("test nullable dataset inserted into not null schema") {
 
     spark.sql(s"""
@@ -219,10 +218,6 @@ class GlutenClickHouseTPCHNullableSkipIndexSuite extends GlutenClickHouseTPCHAbs
                  |TBLPROPERTIES('minmaxIndexKey'='l_receiptdate')
                  |""".stripMargin)
 
-
-    println("hello")
-    Thread.sleep(3000)
-
     spark.sql(s"""
                  | insert into table lineitem_mergetree_minmax2
                  | select * from lineitem
@@ -238,6 +233,7 @@ class GlutenClickHouseTPCHNullableSkipIndexSuite extends GlutenClickHouseTPCHAbs
     val directory = new File(s"$basePath/lineitem_mergetree_minmax2")
     // find a folder whose name is like 48b70783-b3b8-4bf8-9c52-5261aead8e3e_0_006
     val partDir = directory.listFiles().filter(f => f.getName.length > 20).head
+    assert(!partDir.listFiles().exists(p => p.getName.contains("null")))
     assert(
       partDir.listFiles().exists(p => p.getName.contains("skp_idx__minmax_l_receiptdate.idx2")))
   }

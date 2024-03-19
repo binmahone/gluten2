@@ -20,7 +20,6 @@ import io.glutenproject.execution.ColumnarToRowExecBase
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.delta.actions._
 import org.apache.spark.sql.delta.catalog.ClickHouseTableV2
 import org.apache.spark.sql.delta.constraints.{Constraint, Constraints}
@@ -49,12 +48,6 @@ class ClickhouseOptimisticTransaction(
       deltaLog,
       snapshotOpt.getOrElse(deltaLog.update())
     )
-  }
-
-  // By default, Delta will convert all output column to be Nullable
-  // This will make mergetree storage always nullable (even if user specifies `not null` in DDL)
-  override protected def makeOutputNullable(output: Seq[Attribute]): Seq[Attribute] = {
-    output
   }
 
   override def writeFiles(

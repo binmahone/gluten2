@@ -185,4 +185,56 @@ class GlutenClickHouseTPCHNotNullSkipIndexSuite extends GlutenClickHouseTPCHAbst
     assert(!partDir.listFiles().exists(p => p.getName.contains("null")))
     assert(partDir.listFiles().exists(p => p.getName.contains("skp_idx__set_l_orderkey.idx")))
   }
+
+
+  test("test not null dataset inserted into nullable schema") {
+
+    spark.sql(s"""
+                 |DROP TABLE IF EXISTS lineitem_mergetree_minmax2;
+                 |""".stripMargin)
+
+    spark.sql(s"""
+                 |CREATE TABLE IF NOT EXISTS lineitem_mergetree_minmax2
+                 |(
+               l_orderkey      bigint ,
+                 | l_partkey       bigint ,
+                 | l_suppkey       bigint ,
+                 | l_linenumber    bigint ,
+                 | l_quantity      double ,
+                 | l_extendedprice double ,
+                 | l_discount      double ,
+                 | l_tax           double ,
+                 | l_returnflag    string ,
+                 | l_linestatus    string ,
+                 | l_shipdate      date ,
+                 | l_commitdate    date ,
+                 | l_receiptdate   date ,
+                 | l_shipinstruct  string ,
+                 | l_shipmode      string ,
+                 | l_comment       string
+                 |)
+                 |USING clickhouse
+                 |LOCATION '$basePath/lineitem_mergetree_minmax2'
+                 |TBLPROPERTIES('minmaxIndexKey'='l_receiptdate')
+                 |""".stripMargin)
+
+    spark.sql(s"""
+                 | insert into table lineitem_mergetree_minmax2
+                 | select * from lineitem
+                 |""".stripMargin)
+
+    val ret = spark
+      .sql(s"""
+              |select count(*) from lineitem_mergetree_minmax2  where l_receiptdate = '1998-12-27'
+              |""".stripMargin)
+      .collect()
+    assert(ret.apply(0).get(0) == 1)
+
+    val directory = new File(s"$basePath/lineitem_mergetree_minmax2")
+    // find a folder whose name is like 48b70783-b3b8-4bf8-9c52-5261aead8e3e_0_006
+    val partDir = directory.listFiles().filter(f => f.getName.length > 20).head
+    assert(partDir.listFiles().exists(p => p.getName.contains("null")))
+    assert(
+      partDir.listFiles().exists(p => p.getName.contains("skp_idx__minmax_l_receiptdate.idx2")))
+  }
 }
