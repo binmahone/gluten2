@@ -52,6 +52,9 @@ class GlutenClickHouseTPCHBucketSuite
       .set("spark.sql.autoBroadcastJoinThreshold", "-1") // for test bucket join
       .set("spark.sql.adaptive.enabled", "true")
       .set("spark.gluten.sql.columnar.backend.ch.shuffle.hash.algorithm", "sparkMurmurHash3_32")
+      .set("spark.ui.enabled", "true")
+      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.dump_pipeline", "true")
+      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.logger.level", "debug")
   }
 
   override protected val createNullableTables = true
@@ -117,6 +120,7 @@ class GlutenClickHouseTPCHBucketSuite
          | l_shipmode      string,
          | l_comment       string)
          | USING clickhouse
+         | TBLPROPERTIES (primaryKey='l_shipdate, l_orderkey')
          | LOCATION '$lineitemData'
          | CLUSTERED BY (l_orderkey)
          | ${if (sparkVersion.equals("3.2")) "" else "SORTED BY (l_shipdate, l_orderkey)"} INTO 2 BUCKETS;
@@ -801,6 +805,17 @@ class GlutenClickHouseTPCHBucketSuite
           assert(plans.size == 2)
         })
     }
+  }
+
+  test("check skip index effective") {
+    val sql = "select count(*) from lineitem where l_receiptdate = '1998-12-27'"
+//    val sql = "select count(*) from lineitem where l_shipdate = '1998-12-01'"
+//    println("hello sql")
+//    scala.io.StdIn.readLine()
+
+    spark.sql(sql).collect()
+    println("byby")
+    scala.io.StdIn.readLine()
   }
 }
 // scalastyle:off line.size.limit

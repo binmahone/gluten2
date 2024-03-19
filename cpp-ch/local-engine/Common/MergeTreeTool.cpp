@@ -36,6 +36,19 @@ std::shared_ptr<DB::StorageInMemoryMetadata> buildMetaData(const DB::NamesAndTyp
         columns_description.add(ColumnDescription(item.name, item.type));
     }
     metadata->setColumns(std::move(columns_description));
+
+    // set minmax skip index for each column by default
+    std::stringstream ss;
+    int col_idx = 0;
+    for (const auto & column : columns)
+    {
+        if (col_idx != 0)
+            ss << ", ";
+        ss << "dft_idx_foreach_col_" << col_idx << " " <<  column.name << " TYPE minmax GRANULARITY 1";
+        col_idx++;
+    }
+    metadata->setSecondaryIndices(IndicesDescription::parse(ss.str(), metadata->getColumns(),context ));
+
     metadata->partition_key.expression_list_ast = std::make_shared<ASTExpressionList>();
     metadata->sorting_key = KeyDescription::parse(table.order_by_key, metadata->getColumns(), context);
     if (table.primary_key.empty())
