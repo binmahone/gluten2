@@ -186,7 +186,6 @@ class GlutenClickHouseTPCHNotNullSkipIndexSuite extends GlutenClickHouseTPCHAbst
     assert(partDir.listFiles().exists(p => p.getName.contains("skp_idx__set_l_orderkey.idx")))
   }
 
-
   test("test not null dataset inserted into nullable schema") {
 
     spark.sql(s"""

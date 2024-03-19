@@ -93,7 +93,7 @@ class CHMergeTreeWriterInjects extends GlutenFormatWriterInjectsBase {
       partitionColumns,
       ConverterUtils.convertNamedStructJson(tableSchema),
       clickhouseTableConfigs,
-      tableSchema.toAttributes
+      tableSchema.toAttributes // use table schema instead of data schema
     )
 
     val datasourceJniWrapper = new CHDatasourceJniWrapper()
@@ -125,6 +125,7 @@ class CHMergeTreeWriterInjects extends GlutenFormatWriterInjectsBase {
 
 object CHMergeTreeWriterInjects {
 
+  // scalastyle:off argcount
   def genMergeTreeWriteRel(
       path: String,
       database: String,
@@ -139,6 +140,7 @@ object CHMergeTreeWriterInjects {
       tableSchemaJson: String,
       clickhouseTableConfigs: Map[String, String],
       output: Seq[Attribute]): PlanWithSplitInfo = {
+    // scalastyle:on argcount
     val typeNodes = ConverterUtils.collectAttributeTypeNodes(output)
     val nameList = ConverterUtils.collectAttributeNamesWithoutExprId(output)
     val columnTypeNodes = output.map {

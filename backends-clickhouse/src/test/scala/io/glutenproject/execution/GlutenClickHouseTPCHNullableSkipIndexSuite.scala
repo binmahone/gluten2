@@ -161,7 +161,7 @@ class GlutenClickHouseTPCHNullableSkipIndexSuite extends GlutenClickHouseTPCHAbs
                  | l_receiptdate   date ,
                  | l_shipinstruct  string ,
                  | l_shipmode      string ,
-                 | l_comment       string 
+                 | l_comment       string
                  |)
                  |USING clickhouse
                  |LOCATION '$basePath/lineitem_mergetree_set'
@@ -185,7 +185,6 @@ class GlutenClickHouseTPCHNullableSkipIndexSuite extends GlutenClickHouseTPCHAbs
     val partDir = directory.listFiles().filter(f => f.getName.length > 20).head
     assert(partDir.listFiles().exists(p => p.getName.contains("skp_idx__set_l_orderkey.idx")))
   }
-
 
   test("test nullable dataset inserted into not null schema") {
 
