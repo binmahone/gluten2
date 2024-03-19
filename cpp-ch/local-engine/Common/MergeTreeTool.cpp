@@ -22,12 +22,77 @@
 #include <IO/WriteHelpers.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
 #include <google/protobuf/util/json_util.h>
+#include <Poco/StringTokenizer.h>
 
 using namespace DB;
 
 namespace local_engine
 {
-std::shared_ptr<DB::StorageInMemoryMetadata> buildMetaData(const DB::NamesAndTypesList &columns, ContextPtr context, const MergeTreeTable &table)
+
+// set skip index for each column if specified
+void setSecondaryIndex(
+    const DB::NamesAndTypesList & columns,
+    ContextPtr context,
+    const MergeTreeTable & table,
+    std::shared_ptr<DB::StorageInMemoryMetadata> metadata)
+{
+    std::unordered_set<std::string> minmax_index_cols;
+    std::unordered_set<std::string> bf_index_cols;
+    std::unordered_set<std::string> set_index_cols;
+    {
+        Poco::StringTokenizer tokenizer(table.minmax_index_key, ",");
+        for (const auto & token : tokenizer)
+            minmax_index_cols.insert(token);
+    }
+    {
+        Poco::StringTokenizer tokenizer(table.bf_index_key, ",");
+        for (const auto & token : tokenizer)
+            bf_index_cols.insert(token);
+    }
+    {
+        Poco::StringTokenizer tokenizer(table.set_index_key, ",");
+        for (const auto & token : tokenizer)
+            set_index_cols.insert(token);
+    }
+
+    std::stringstream ss;
+    bool first = true;
+    for (const auto & column : columns)
+    {
+        if (minmax_index_cols.contains(column.name))
+        {
+            if (!first)
+                ss << ", ";
+            else
+                first = false;
+            ss << "_minmax_" << column.name << " " << column.name <<  " TYPE minmax GRANULARITY 1";
+        }
+
+        if (bf_index_cols.contains(column.name))
+        {
+            if (!first)
+                ss << ", ";
+            else
+                first = false;
+            ss << "_bloomfilter_"  << column.name << " " << column.name << " TYPE bloom_filter GRANULARITY 1";
+        }
+
+        if (set_index_cols.contains(column.name))
+        {
+            if (!first)
+                ss << ", ";
+            else
+                first = false;
+            ss << "_set_" << column.name << " " << column.name << " TYPE set(0) GRANULARITY 1";
+        }
+    }
+    metadata->setSecondaryIndices(IndicesDescription::parse(ss.str(), metadata->getColumns(), context));
+}
+
+std::shared_ptr<DB::StorageInMemoryMetadata> buildMetaData(
+    const DB::NamesAndTypesList & columns,
+    ContextPtr context,
+    const MergeTreeTable & table)
 {
     std::shared_ptr<DB::StorageInMemoryMetadata> metadata = std::make_shared<DB::StorageInMemoryMetadata>();
     ColumnsDescription columns_description;
@@ -37,17 +102,7 @@ std::shared_ptr<DB::StorageInMemoryMetadata> buildMetaData(const DB::NamesAndTyp
     }
     metadata->setColumns(std::move(columns_description));
 
-    // set minmax skip index for each column by default
-    std::stringstream ss;
-    int col_idx = 0;
-    for (const auto & column : columns)
-    {
-        if (col_idx != 0)
-            ss << ", ";
-        ss << "dft_idx_foreach_col_" << col_idx << " " <<  column.name << " TYPE minmax GRANULARITY 1";
-        col_idx++;
-    }
-    metadata->setSecondaryIndices(IndicesDescription::parse(ss.str(), metadata->getColumns(),context ));
+    setSecondaryIndex(columns, context, table, metadata);
 
     metadata->partition_key.expression_list_ast = std::make_shared<ASTExpressionList>();
     metadata->sorting_key = KeyDescription::parse(table.order_by_key, metadata->getColumns(), context);
@@ -65,8 +120,8 @@ std::shared_ptr<DB::StorageInMemoryMetadata> buildMetaData(const DB::NamesAndTyp
 std::unique_ptr<MergeTreeSettings> buildMergeTreeSettings()
 {
     auto settings = std::make_unique<DB::MergeTreeSettings>();
-//    settings->set("min_bytes_for_wide_part", Field(0));
-//    settings->set("min_rows_for_wide_part", Field(0));
+    //    settings->set("min_bytes_for_wide_part", Field(0));
+    //    settings->set("min_rows_for_wide_part", Field(0));
     settings->set("allow_nullable_key", Field(1));
     // settings->set("storage_policy", Field("s3_main"));
     return settings;
@@ -85,7 +140,6 @@ std::unique_ptr<SelectQueryInfo> buildQueryInfo(NamesAndTypesList & names_and_ty
 
 MergeTreeTable parseMergeTreeTableString(const std::string & info)
 {
-
     ReadBufferFromString in(info);
     assertString("MergeTree;", in);
     MergeTreeTable table;
@@ -105,6 +159,12 @@ MergeTreeTable parseMergeTreeTableString(const std::string & info)
         assertChar('\n', in);
     }
     readString(table.low_card_key, in);
+    assertChar('\n', in);
+    readString(table.minmax_index_key, in);
+    assertChar('\n', in);
+    readString(table.bf_index_key, in);
+    assertChar('\n', in);
+    readString(table.set_index_key, in);
     assertChar('\n', in);
     readString(table.relative_path, in);
     assertChar('\n', in);
@@ -137,13 +197,13 @@ std::unordered_set<String> MergeTreeTable::getPartNames() const
 RangesInDataParts MergeTreeTable::extractRange(DataPartsVector parts_vector) const
 {
     std::unordered_map<String, DataPartPtr> name_index;
-    std::ranges::for_each(parts_vector, [&](const DataPartPtr & part) {name_index.emplace(part->name, part);});
+    std::ranges::for_each(parts_vector, [&](const DataPartPtr & part) { name_index.emplace(part->name, part); });
     RangesInDataParts ranges_in_data_parts;
 
     std::ranges::transform(
         parts,
         std::inserter(ranges_in_data_parts, ranges_in_data_parts.end()),
-        [&](const MergeTreePart& part)
+        [&](const MergeTreePart & part)
         {
             RangesInDataPart ranges_in_data_part;
             ranges_in_data_part.data_part = name_index.at(part.name);
@@ -153,5 +213,4 @@ RangesInDataParts MergeTreeTable::extractRange(DataPartsVector parts_vector) con
         });
     return ranges_in_data_parts;
 }
-
 }

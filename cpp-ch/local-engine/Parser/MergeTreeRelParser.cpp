@@ -37,7 +37,6 @@ extern const int NO_SUCH_DATA_PART;
 extern const int LOGICAL_ERROR;
 extern const int UNKNOWN_FUNCTION;
 extern const int UNKNOWN_TYPE;
-
 }
 }
 
@@ -71,7 +70,9 @@ CustomStorageMergeTreePtr MergeTreeRelParser::parseStorage(
     auto merge_tree_table = local_engine::parseMergeTreeTableString(table.value());
     DB::Block header;
     chassert(rel.has_base_schema());
-    header = TypeParser::buildBlockFromNamedStruct(rel.base_schema(), merge_tree_table.low_card_key);
+    header = TypeParser::buildBlockFromNamedStruct(
+        rel.base_schema(),
+        merge_tree_table.low_card_key);
     auto names_and_types_list = header.getNamesAndTypesList();
     auto storage_factory = StorageMergeTreeFactory::instance();
     auto metadata = buildMetaData(names_and_types_list, context, merge_tree_table);
@@ -164,7 +165,8 @@ MergeTreeRelParser::parseReadRel(
         throw Exception(ErrorCodes::NO_SUCH_DATA_PART, "no data part found.");
     auto read_step = query_context.custom_storage_merge_tree->reader.readFromParts(
         selected_parts,
-        /* alter_conversions = */ {},
+        /* alter_conversions = */
+        {},
         names_and_types_list.getNames(),
         query_context.storage_snapshot,
         *query_info,
@@ -274,7 +276,10 @@ void MergeTreeRelParser::parseToAction(ActionsDAGPtr & filter_action, const subs
 }
 
 void MergeTreeRelParser::analyzeExpressions(
-    Conditions & res, const substrait::Expression & rel, std::set<Int64> & pk_positions, Block & block)
+    Conditions & res,
+    const substrait::Expression & rel,
+    std::set<Int64> & pk_positions,
+    Block & block)
 {
     if (rel.has_scalar_function() && getCHFunctionName(rel.scalar_function()) == "and")
     {
@@ -386,5 +391,4 @@ String MergeTreeRelParser::getCHFunctionName(const substrait::Expression_ScalarF
         throw Exception(ErrorCodes::UNKNOWN_FUNCTION, "Unsupported substrait function on mergetree prewhere parser: {}", func_name);
     return it->second;
 }
-
 }

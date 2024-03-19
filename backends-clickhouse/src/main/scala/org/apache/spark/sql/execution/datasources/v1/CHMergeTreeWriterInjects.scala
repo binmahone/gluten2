@@ -68,6 +68,9 @@ class CHMergeTreeWriterInjects extends GlutenFormatWriterInjectsBase {
       tableName: String,
       orderByKeyOption: Option[Seq[String]],
       lowCardKeyOption: Option[Seq[String]],
+      minmaxIndexKeyOption: Option[Seq[String]],
+      bfIndexKeyOption: Option[Seq[String]],
+      setIndexKeyOption: Option[Seq[String]],
       primaryKeyOption: Option[Seq[String]],
       partitionColumns: Seq[String],
       tableSchema: StructType,
@@ -83,6 +86,9 @@ class CHMergeTreeWriterInjects extends GlutenFormatWriterInjectsBase {
       tableName,
       orderByKeyOption,
       lowCardKeyOption,
+      minmaxIndexKeyOption,
+      bfIndexKeyOption,
+      setIndexKeyOption,
       primaryKeyOption,
       partitionColumns,
       ConverterUtils.convertNamedStructJson(tableSchema),
@@ -125,6 +131,9 @@ object CHMergeTreeWriterInjects {
       tableName: String,
       orderByKeyOption: Option[Seq[String]],
       lowCardKeyOption: Option[Seq[String]],
+      minmaxIndexKeyOption: Option[Seq[String]],
+      bfIndexKeyOption: Option[Seq[String]],
+      setIndexKeyOption: Option[Seq[String]],
       primaryKeyOption: Option[Seq[String]],
       partitionColumns: Seq[String],
       tableSchemaJson: String,
@@ -150,6 +159,18 @@ object CHMergeTreeWriterInjects {
       case Some(keys) => keys.mkString(",")
       case None => ""
     }
+    val minmaxIndexKey = minmaxIndexKeyOption match {
+      case Some(keys) => keys.mkString(",")
+      case None => ""
+    }
+    val bfIndexKey = bfIndexKeyOption match {
+      case Some(keys) => keys.mkString(",")
+      case None => ""
+    }
+    val setIndexKey = setIndexKeyOption match {
+      case Some(keys) => keys.mkString(",")
+      case None => ""
+    }
 
     val substraitContext = new SubstraitContext
     val extensionTableNode = ExtensionTableBuilder.makeExtensionTable(
@@ -161,6 +182,9 @@ object CHMergeTreeWriterInjects {
       "",
       orderByKey,
       lowCardKey,
+      minmaxIndexKey,
+      bfIndexKey,
+      setIndexKey,
       primaryKey,
       new JList[String](),
       new JList[JLong](),

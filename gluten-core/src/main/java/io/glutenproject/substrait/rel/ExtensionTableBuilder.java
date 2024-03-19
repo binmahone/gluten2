@@ -20,39 +20,46 @@ import java.util.List;
 import java.util.Map;
 
 public class ExtensionTableBuilder {
-  private ExtensionTableBuilder() {}
+    private ExtensionTableBuilder() {
+    }
 
-  public static ExtensionTableNode makeExtensionTable(
-      Long minPartsNum,
-      Long maxPartsNum,
-      String database,
-      String tableName,
-      String relativeTablePath,
-      String absoluteTablePath,
-      String orderByKey,
-      String lowCardKey,
-      String primaryKey,
-      List<String> partList,
-      List<Long> starts,
-      List<Long> lengths,
-      String tableSchemaJson,
-      Map<String, String> clickhouseTableConfigs,
-      List<String> preferredLocations) {
-    return new ExtensionTableNode(
-        minPartsNum,
-        maxPartsNum,
-        database,
-        tableName,
-        relativeTablePath,
-        absoluteTablePath,
-        orderByKey,
-        lowCardKey,
-        primaryKey,
-        partList,
-        starts,
-        lengths,
-        tableSchemaJson,
-        clickhouseTableConfigs,
-        preferredLocations);
-  }
+    public static ExtensionTableNode makeExtensionTable(
+            Long minPartsNum,
+            Long maxPartsNum,
+            String database,
+            String tableName,
+            String relativeTablePath,
+            String absoluteTablePath,
+            String orderByKey,
+            String lowCardKey,
+            String minmaxIndexKey,
+            String bfIndexKey,
+            String setIndexKey,
+            String primaryKey,
+            List<String> partList,
+            List<Long> starts,
+            List<Long> lengths,
+            String tableSchemaJson,
+            Map<String, String> clickhouseTableConfigs,
+            List<String> preferredLocations) {
+        return new ExtensionTableNode(
+                minPartsNum,
+                maxPartsNum,
+                database,
+                tableName,
+                relativeTablePath,
+                absoluteTablePath,
+                orderByKey,
+                lowCardKey,
+                minmaxIndexKey,
+                bfIndexKey,
+                setIndexKey,
+                primaryKey,
+                partList,
+                starts,
+                lengths,
+                tableSchemaJson,
+                clickhouseTableConfigs,
+                preferredLocations);
+    }
 }

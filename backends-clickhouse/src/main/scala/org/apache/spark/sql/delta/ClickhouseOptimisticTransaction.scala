@@ -20,6 +20,7 @@ import io.glutenproject.execution.ColumnarToRowExecBase
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.delta.actions._
 import org.apache.spark.sql.delta.catalog.ClickHouseTableV2
 import org.apache.spark.sql.delta.constraints.{Constraint, Constraints}
@@ -48,6 +49,12 @@ class ClickhouseOptimisticTransaction(
       deltaLog,
       snapshotOpt.getOrElse(deltaLog.update())
     )
+  }
+
+  // By default, Delta will convert all output column to be Nullable
+  // This will make mergetree storage always nullable (even if user specifies `not null` in DDL)
+  override protected def makeOutputNullable(output: Seq[Attribute]): Seq[Attribute] = {
+    output
   }
 
   override def writeFiles(
@@ -131,6 +138,9 @@ class ClickhouseOptimisticTransaction(
             output,
             tableV2.orderByKeyOption,
             tableV2.lowCardKeyOption,
+            tableV2.minmaxIndexKeyOption,
+            tableV2.bfIndexKeyOption,
+            tableV2.setIndexKeyOption,
             tableV2.primaryKeyOption,
             tableV2.clickhouseTableConfigs,
             tableV2.partitionColumns
@@ -144,6 +154,9 @@ class ClickhouseOptimisticTransaction(
           // scalastyle:on deltahadoopconfiguration
           orderByKeyOption = tableV2.orderByKeyOption,
           lowCardKeyOption = tableV2.lowCardKeyOption,
+          minmaxIndexKeyOption = tableV2.minmaxIndexKeyOption,
+          bfIndexKeyOption = tableV2.bfIndexKeyOption,
+          setIndexKeyOption = tableV2.setIndexKeyOption,
           primaryKeyOption = tableV2.primaryKeyOption,
           partitionColumns = partitioningColumns,
           bucketSpec = tableV2.bucketOption,
