@@ -1,11 +1,12 @@
 /*
- * Copyright (2021) The Delta Lake Project Authors.
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.delta.commands
 
 import org.apache.spark.SparkContext
@@ -39,15 +39,14 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{SystemClock, ThreadUtils}
 
 import java.util.ConcurrentModificationException
+
 import scala.collection.mutable.ArrayBuffer
 
 /**
  * Gluten overwrite Delta:
  *
  * This file is copied from Delta 2.2.0. It is modified in:
- * 1. getDeltaLogClickhouse
- * 2. runOptimizeBinJobClickhouse
- * 3. groupFilesIntoBinsClickhouse
+ *   1. getDeltaLogClickhouse 2. runOptimizeBinJobClickhouse 3. groupFilesIntoBinsClickhouse
  */
 
 /** Base class defining abstract optimize command */
@@ -191,8 +190,9 @@ class OptimizeExecutor(
 
       // select all files in case of multi-dimensional clustering
       val filesToProcess = candidateFiles.filter(_.size < minFileSize || isMultiDimClustering)
-      val partitionsToCompact = filesToProcess.groupBy(
-        file => (file.asInstanceOf[AddMergeTreeParts].bucketNum, file.partitionValues)).toSeq
+      val partitionsToCompact = filesToProcess
+        .groupBy(file => (file.asInstanceOf[AddMergeTreeParts].bucketNum, file.partitionValues))
+        .toSeq
 
       val jobs = groupFilesIntoBinsClickhouse(partitionsToCompact, maxFileSize)
 
@@ -201,8 +201,12 @@ class OptimizeExecutor(
       val updates = ThreadUtils
         .parmap(jobs, "OptimizeJob", maxThreads) {
           partitionBinGroup =>
-            runOptimizeBinJobClickhouse(txn, partitionBinGroup._1._2,  partitionBinGroup._1._1
-              , partitionBinGroup._2, maxFileSize)
+            runOptimizeBinJobClickhouse(
+              txn,
+              partitionBinGroup._1._2,
+              partitionBinGroup._1._1,
+              partitionBinGroup._2,
+              maxFileSize)
         }
         .flatten
 

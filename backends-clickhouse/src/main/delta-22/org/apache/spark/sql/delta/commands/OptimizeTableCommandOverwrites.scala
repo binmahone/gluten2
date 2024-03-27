@@ -1,6 +1,23 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.spark.sql.delta.commands
 
 import io.glutenproject.expression.ConverterUtils
+
 import org.apache.spark.{TaskContext, TaskOutputFileAlreadyExistException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
@@ -19,11 +36,13 @@ import org.apache.spark.sql.execution.datasources.v2.clickhouse.metadata.{AddFil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SerializableConfiguration, SystemClock, Utils}
+
 import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import java.util.{Date, UUID}
+
 import scala.collection.mutable.ArrayBuffer
 
 object OptimizeTableCommandOverwrites extends Logging {
@@ -146,7 +165,7 @@ object OptimizeTableCommandOverwrites extends Logging {
   def runOptimizeBinJobClickhouse(
       txn: OptimisticTransaction,
       partitionValues: Map[String, String],
-      bucketNum : String,
+      bucketNum: String,
       bin: Seq[AddFile],
       maxFileSize: Long): Seq[FileAction] = {
     val tableV2 = ClickHouseTableV2.getTable(txn.deltaLog);
@@ -169,7 +188,7 @@ object OptimizeTableCommandOverwrites extends Logging {
       Some(tableV2.partitionColumns.map(c => c + "=" + partitionValues(c)).mkString("/"))
     }
 
-    val bucketDir = if (tableV2.bucketOption.isEmpty){
+    val bucketDir = if (tableV2.bucketOption.isEmpty) {
       None
     } else {
       Some(bucketNum)
@@ -260,11 +279,9 @@ object OptimizeTableCommandOverwrites extends Logging {
     deltaLog
   }
 
-
-
   def groupFilesIntoBinsClickhouse(
-                                  partitionsToCompact: Seq[((String, Map[String, String]), Seq[AddFile])],
-                                  maxTargetFileSize: Long): Seq[((String, Map[String, String]), Seq[AddFile])] = {
+      partitionsToCompact: Seq[((String, Map[String, String]), Seq[AddFile])],
+      maxTargetFileSize: Long): Seq[((String, Map[String, String]), Seq[AddFile])] = {
     partitionsToCompact.flatMap {
       case (partition, files) =>
         val bins = new ArrayBuffer[Seq[AddFile]]()
@@ -281,7 +298,7 @@ object OptimizeTableCommandOverwrites extends Logging {
             // will be produced. See below.
 
             // isMultiDimClustering is always false for Gluten Clickhouse for now
-            if (file.size + currentBinSize > maxTargetFileSize /*&& !isMultiDimClustering */) {
+            if (file.size + currentBinSize > maxTargetFileSize /*&& !isMultiDimClustering */ ) {
               bins += currentBin.toVector
               currentBin.clear()
               currentBin += file
@@ -300,7 +317,7 @@ object OptimizeTableCommandOverwrites extends Logging {
           .map(b => (partition, b))
           // select bins that have at least two files or in case of multi-dim clustering
           // select all bins
-          .filter(_._2.size > 1 /*|| isMultiDimClustering*/)
+          .filter(_._2.size > 1 /*|| isMultiDimClustering*/ )
     }
   }
 }
