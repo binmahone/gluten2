@@ -1082,12 +1082,8 @@ JNIEXPORT jstring Java_org_apache_spark_sql_execution_datasources_CHDatasourceJn
 {
     LOCAL_ENGINE_JNI_METHOD_START
 
-    // without this block, subsequent executeHere will throw an exception , TODO simply?
-    auto query_context = Context::createCopy(local_engine::SerializedPlanParser::global_context);
-    query_context->makeQueryContext();
-    query_context->setCurrentQueryId("");
+    // without this line, subsequent executeHere will throw an exception
     auto status = std::make_shared<ThreadStatus>(true);
-    auto scope =  std::make_shared<CurrentThread::QueryScope>(query_context);
 
 
     const auto uuid_str = jstring2string(env, uuid_);

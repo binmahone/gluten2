@@ -13,7 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/**
+ * Gluten overwrite Delta:
+ *
+ * This file is copied from Delta 2.0.1. It is modified in:
+ *   1. getDeltaLogClickhouse 2. runOptimizeBinJobClickhouse 3. groupFilesIntoBinsClickhouse
+ */
 package org.apache.spark.sql.delta.commands
 
 import org.apache.spark.SparkContext
@@ -39,16 +44,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{SystemClock, ThreadUtils}
 
 import java.util.ConcurrentModificationException
-import scala.collection.mutable.ArrayBuffer
 
-/**
- * Gluten overwrite Delta:
- *
- * This file is copied from Delta 2.2.0. It is modified in:
- * 1. getDeltaLogClickhouse
- * 2. runOptimizeBinJobClickhouse
- * 3. groupFilesIntoBinsClickhouse
- */
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 
 /** Base class defining abstract optimize command */
 abstract class OptimizeTableCommandBase extends RunnableCommand with DeltaCommand {
@@ -65,24 +64,24 @@ abstract class OptimizeTableCommandBase extends RunnableCommand with DeltaComman
    *
    * @param spark
    *   [[SparkSession]] to use
-   * @param txn
-   *   the [[OptimisticTransaction]] being used to optimize
+   * @param deltaLog
+   *   [[DeltaLog]] corresponding to the table
    * @param unresolvedZOrderByCols
    *   Seq of [[UnresolvedAttribute]] corresponding to zOrderBy columns
    */
   def validateZorderByColumns(
       spark: SparkSession,
-      txn: OptimisticTransaction,
+      deltaLog: DeltaLog,
       unresolvedZOrderByCols: Seq[UnresolvedAttribute]): Unit = {
     if (unresolvedZOrderByCols.isEmpty) return
-    val metadata = txn.snapshot.metadata
+    val metadata = deltaLog.snapshot.metadata
     val partitionColumns = metadata.partitionColumns.toSet
     val dataSchema =
       StructType(metadata.schema.filterNot(c => partitionColumns.contains(c.name)))
     val df = spark.createDataFrame(new java.util.ArrayList[Row](), dataSchema)
     val checkColStat =
       spark.sessionState.conf.getConf(DeltaSQLConf.DELTA_OPTIMIZE_ZORDER_COL_STAT_CHECK)
-    val statCollectionSchema = txn.snapshot.statCollectionSchema
+    val statCollectionSchema = deltaLog.snapshot.statCollectionSchema
     val colsWithoutStats = ArrayBuffer[String]()
 
     unresolvedZOrderByCols.foreach {
@@ -119,36 +118,32 @@ abstract class OptimizeTableCommandBase extends RunnableCommand with DeltaComman
 case class OptimizeTableCommand(
     path: Option[String],
     tableId: Option[TableIdentifier],
-    userPartitionPredicates: Seq[String],
-    options: Map[String, String])(val zOrderBy: Seq[UnresolvedAttribute])
+    partitionPredicate: Option[String])(val zOrderBy: Seq[UnresolvedAttribute])
   extends OptimizeTableCommandBase
   with LeafRunnableCommand {
 
   override val otherCopyArgs: Seq[AnyRef] = zOrderBy :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val deltaLog = getDeltaLogClickhouse(sparkSession, path, tableId, "OPTIMIZE", options)
+    val deltaLog = getDeltaLogClickhouse(sparkSession, path, tableId, "OPTIMIZE")
 
-    val txn = deltaLog.startTransaction()
-    if (txn.readVersion == -1) {
-      throw DeltaErrors.notADeltaTableException(deltaLog.dataPath.toString)
-    }
-
-    val partitionColumns = txn.snapshot.metadata.partitionColumns
+    val partitionColumns = deltaLog.snapshot.metadata.partitionColumns
     // Parse the predicate expression into Catalyst expression and verify only simple filters
     // on partition columns are present
+    val partitionPredicates = partitionPredicate
+      .map(
+        predicate => {
+          val predicates = parsePredicates(sparkSession, predicate)
+          verifyPartitionPredicates(sparkSession, partitionColumns, predicates)
+          predicates
+        })
+      .getOrElse(Seq.empty)
 
-    val partitionPredicates = userPartitionPredicates.flatMap {
-      predicate =>
-        val predicates = parsePredicates(sparkSession, predicate)
-        verifyPartitionPredicates(sparkSession, partitionColumns, predicates)
-        predicates
-    }
-
-    validateZorderByColumns(sparkSession, txn, zOrderBy)
+    validateZorderByColumns(sparkSession, deltaLog, zOrderBy)
     val zOrderByColumns = zOrderBy.map(_.name).toSeq
 
-    new OptimizeExecutor(sparkSession, txn, partitionPredicates, zOrderByColumns).optimize()
+    new OptimizeExecutor(sparkSession, deltaLog, partitionPredicates, zOrderByColumns)
+      .optimize()
   }
 }
 
@@ -158,14 +153,14 @@ case class OptimizeTableCommand(
  *
  * @param sparkSession
  *   Spark environment reference.
- * @param txn
- *   The transaction used to optimize this table
+ * @param deltaLog
+ *   Delta table that is being optimized.
  * @param partitionPredicate
  *   List of partition predicates to select subset of files to optimize.
  */
 class OptimizeExecutor(
     sparkSession: SparkSession,
-    txn: OptimisticTransaction,
+    deltaLog: DeltaLog,
     partitionPredicate: Seq[Expression],
     zOrderByColumns: Seq[String])
   extends DeltaCommand
@@ -178,7 +173,7 @@ class OptimizeExecutor(
   private val isMultiDimClustering = zOrderByColumns.nonEmpty
 
   def optimize(): Seq[Row] = {
-    recordDeltaOperation(txn.deltaLog, "delta.optimize") {
+    recordDeltaOperation(deltaLog, "delta.optimize") {
       val minFileSize =
         sparkSession.sessionState.conf.getConf(DeltaSQLConf.DELTA_OPTIMIZE_MIN_FILE_SIZE)
       val maxFileSize =
@@ -186,25 +181,47 @@ class OptimizeExecutor(
       require(minFileSize > 0, "minFileSize must be > 0")
       require(maxFileSize > 0, "maxFileSize must be > 0")
 
+      val txn = deltaLog.startTransaction()
+      if (txn.readVersion == -1) {
+        throw DeltaErrors.notADeltaTableException(deltaLog.dataPath.toString)
+      }
+
       val candidateFiles = txn.filterFiles(partitionPredicate)
       val partitionSchema = txn.metadata.partitionSchema
 
       // select all files in case of multi-dimensional clustering
       val filesToProcess = candidateFiles.filter(_.size < minFileSize || isMultiDimClustering)
-      val partitionsToCompact = filesToProcess.groupBy(
-        file => (file.asInstanceOf[AddMergeTreeParts].bucketNum, file.partitionValues)).toSeq
+      val partitionsToCompact = filesToProcess
+        .groupBy(file => (file.asInstanceOf[AddMergeTreeParts].bucketNum, file.partitionValues))
+        .toSeq
 
       val jobs = groupFilesIntoBinsClickhouse(partitionsToCompact, maxFileSize)
 
-      val maxThreads =
-        sparkSession.sessionState.conf.getConf(DeltaSQLConf.DELTA_OPTIMIZE_MAX_THREADS)
-      val updates = ThreadUtils
-        .parmap(jobs, "OptimizeJob", maxThreads) {
-          partitionBinGroup =>
-            runOptimizeBinJobClickhouse(txn, partitionBinGroup._1._2,  partitionBinGroup._1._1
-              , partitionBinGroup._2, maxFileSize)
+      val parallelJobCollection = new ParVector(jobs.toVector)
+
+      // Create a task pool to parallelize the submission of optimization jobs to Spark.
+      val threadPool = ThreadUtils.newForkJoinPool(
+        "OptimizeJob",
+        sparkSession.sessionState.conf.getConf(DeltaSQLConf.DELTA_OPTIMIZE_MAX_THREADS))
+
+      val updates =
+        try {
+          val forkJoinPoolTaskSupport = new ForkJoinTaskSupport(threadPool)
+          parallelJobCollection.tasksupport = forkJoinPoolTaskSupport
+
+          parallelJobCollection
+            .flatMap(
+              partitionBinGroup =>
+                runOptimizeBinJobClickhouse(
+                  txn,
+                  partitionBinGroup._1._2,
+                  partitionBinGroup._1._1,
+                  partitionBinGroup._2,
+                  maxFileSize))
+            .seq
+        } finally {
+          threadPool.shutdownNow()
         }
-        .flatten
 
       val addedFiles = updates.collect { case a: AddFile => a }
       val removedFiles = updates.collect { case r: RemoveFile => r }
@@ -241,7 +258,6 @@ class OptimizeExecutor(
       optimizeStats.numBatches = jobs.size
       optimizeStats.totalConsideredFiles = candidateFiles.size
       optimizeStats.totalFilesSkipped = optimizeStats.totalConsideredFiles - removedFiles.size
-      optimizeStats.totalClusterParallelism = sparkSession.sparkContext.defaultParallelism
 
       if (isMultiDimClustering) {
         val inputFileStats =
@@ -258,7 +274,7 @@ class OptimizeExecutor(
           ))
       }
 
-      return Seq(Row(txn.deltaLog.dataPath.toString, optimizeStats.toOptimizeMetrics))
+      return Seq(Row(deltaLog.dataPath.toString, optimizeStats.toOptimizeMetrics))
     }
   }
 
@@ -331,7 +347,7 @@ class OptimizeExecutor(
       partition: Map[String, String],
       bin: Seq[AddFile],
       maxFileSize: Long): Seq[FileAction] = {
-    val baseTablePath = txn.deltaLog.dataPath
+    val baseTablePath = deltaLog.dataPath
 
     val input = txn.deltaLog.createDataFrame(txn.snapshot, bin, actionTypeOpt = Some("Optimize"))
     val repartitionDF = if (isMultiDimClustering) {
@@ -339,13 +355,7 @@ class OptimizeExecutor(
       val approxNumFiles = Math.max(1, totalSize / maxFileSize).toInt
       MultiDimClustering.cluster(input, approxNumFiles, zOrderByColumns)
     } else {
-      val useRepartition =
-        sparkSession.sessionState.conf.getConf(DeltaSQLConf.DELTA_OPTIMIZE_REPARTITION_ENABLED)
-      if (useRepartition) {
-        input.repartition(numPartitions = 1)
-      } else {
-        input.coalesce(numPartitions = 1)
-      }
+      input.coalesce(numPartitions = 1)
     }
 
     val partitionDesc = partition.toSeq.map(entry => entry._1 + "=" + entry._2).mkString(",")
