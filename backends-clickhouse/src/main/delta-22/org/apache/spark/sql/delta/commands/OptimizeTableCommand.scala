@@ -25,13 +25,14 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.delta._
 import org.apache.spark.sql.delta.DeltaOperations.Operation
 import org.apache.spark.sql.delta.actions.{Action, AddFile, FileAction, RemoveFile}
-import org.apache.spark.sql.delta.commands.OptimizeTableCommandOverwrites.{getDeltaLogClickhouse, runOptimizeBinJobClickhouse}
+import org.apache.spark.sql.delta.commands.OptimizeTableCommandOverwrites.{getDeltaLogClickhouse, groupFilesIntoBinsClickhouse, runOptimizeBinJobClickhouse}
 import org.apache.spark.sql.delta.commands.optimize._
 import org.apache.spark.sql.delta.files.SQLMetricsReporting
 import org.apache.spark.sql.delta.schema.SchemaUtils
 import org.apache.spark.sql.delta.skipping.MultiDimClustering
 import org.apache.spark.sql.delta.sources.DeltaSQLConf
 import org.apache.spark.sql.execution.command.{LeafRunnableCommand, RunnableCommand}
+import org.apache.spark.sql.execution.datasources.v2.clickhouse.metadata.AddMergeTreeParts
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.metric.SQLMetrics.createMetric
 import org.apache.spark.sql.types._
@@ -189,16 +190,18 @@ class OptimizeExecutor(
 
       // select all files in case of multi-dimensional clustering
       val filesToProcess = candidateFiles.filter(_.size < minFileSize || isMultiDimClustering)
-      val partitionsToCompact = filesToProcess.groupBy(_.partitionValues).toSeq
+      val partitionsToCompact = filesToProcess.groupBy(
+        file => (file.asInstanceOf[AddMergeTreeParts].bucketNum, file.partitionValues)).toSeq
 
-      val jobs = groupFilesIntoBins(partitionsToCompact, maxFileSize)
+      val jobs = groupFilesIntoBinsClickhouse(partitionsToCompact, maxFileSize)
 
       val maxThreads =
         sparkSession.sessionState.conf.getConf(DeltaSQLConf.DELTA_OPTIMIZE_MAX_THREADS)
       val updates = ThreadUtils
         .parmap(jobs, "OptimizeJob", maxThreads) {
           partitionBinGroup =>
-            runOptimizeBinJobClickhouse(txn, partitionBinGroup._1, partitionBinGroup._2, maxFileSize)
+            runOptimizeBinJobClickhouse(txn, partitionBinGroup._1._2,  partitionBinGroup._1._1
+              , partitionBinGroup._2, maxFileSize)
         }
         .flatten
 

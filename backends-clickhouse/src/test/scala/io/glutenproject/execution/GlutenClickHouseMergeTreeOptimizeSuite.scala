@@ -51,10 +51,9 @@ class GlutenClickHouseMergeTreeOptimizeSuite
       .set(
         "spark.gluten.sql.columnar.backend.ch.runtime_config.user_defined_path",
         "/tmp/user_defined")
-      .set("spark.ui.enabled", "true")
       .set(
         "spark.gluten.sql.columnar.backend.ch.runtime_settings.min_insert_block_size_rows",
-        "10000")
+        "10000") // so that we have enough parts to test
 //      .set("spark.ui.enabled", "true")
 //      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.dump_pipeline", "true")
 //      .set("spark.gluten.sql.columnar.backend.ch.runtime_config.logger.level", "debug")
@@ -282,6 +281,39 @@ class GlutenClickHouseMergeTreeOptimizeSuite
 
     val ret = spark.sql("select count(*) from lineitem_mergetree_optimize_p5").collect()
     assert(ret.apply(0).get(0) == 600572)
+  }
+
+
+
+  test("test mergetree optimize table with partition and bucket") {
+    spark.sql(s"""
+                 |DROP TABLE IF EXISTS lineitem_mergetree_optimize_p6;
+                 |""".stripMargin)
+
+    spark.sql(s"""
+                 |CREATE TABLE IF NOT EXISTS lineitem_mergetree_optimize_p6
+                 |USING clickhouse
+                 |PARTITIONED BY (l_returnflag)
+                 |LOCATION '$basePath/lineitem_mergetree_optimize_p6'
+                 | CLUSTERED BY (l_partkey)
+                 | ${if (sparkVersion.equals("3.2")) "" else "SORTED BY (l_partkey)"} INTO 2 BUCKETS
+                 | as select * from lineitem
+                 |""".stripMargin)
+
+    spark.sql("optimize lineitem_mergetree_optimize_p6")
+
+    val ret = spark.sql("select count(*) from lineitem_mergetree_optimize_p6").collect()
+    assert(ret.apply(0).get(0) == 600572)
+
+    spark.sql("set spark.gluten.enabled=false")
+    assert(countFiles(new File(s"$basePath/lineitem_mergetree_optimize_p6")) == 1023)
+    spark.sql("VACUUM lineitem_mergetree_optimize_p6 RETAIN 0 HOURS")
+    spark.sql("VACUUM lineitem_mergetree_optimize_p6 RETAIN 0 HOURS")
+    assert(countFiles(new File(s"$basePath/lineitem_mergetree_optimize_p6")) == 445)
+    spark.sql("set spark.gluten.enabled=true")
+
+    val ret2 = spark.sql("select count(*) from lineitem_mergetree_optimize_p6").collect()
+    assert(ret2.apply(0).get(0) == 600572)
   }
 
 }

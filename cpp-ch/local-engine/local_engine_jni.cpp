@@ -1136,12 +1136,11 @@ JNIEXPORT jstring Java_org_apache_spark_sql_execution_datasources_CHDatasourceJn
 
     future_part->assign(std::move(selected_parts));
 
+    future_part->name = "";
     std::unordered_map<String, String> partition_values;
-    if(partition_dir.empty())
-        future_part->name =  uuid_str + "-merged" ;
-    else
+    if(!partition_dir.empty())
     {
-        future_part->name =  partition_dir + "/" + uuid_str + "-merged" ;
+        future_part->name =  partition_dir + "/";
         Poco::StringTokenizer partitions(partition_dir, "/");
         for (const auto & partition : partitions)
         {
@@ -1150,6 +1149,11 @@ JNIEXPORT jstring Java_org_apache_spark_sql_execution_datasources_CHDatasourceJn
             partition_values.emplace(key_value[0], key_value[1]);
         }
     }
+    if(!bucket_dir.empty())
+    {
+        future_part->name = future_part->name + bucket_dir + "/";
+    }
+    future_part->name = future_part->name +  uuid_str + "-merged";
 
     auto entry = std::make_shared<DB::MergeMutateSelectedEntry>(future_part, DB::CurrentlyMergingPartsTaggerPtr{}, std::make_shared<DB::MutationCommands>());
 

@@ -1,7 +1,6 @@
 package org.apache.spark.sql.delta.commands
 
 import io.glutenproject.expression.ConverterUtils
-
 import org.apache.spark.{TaskContext, TaskOutputFileAlreadyExistException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
@@ -20,12 +19,12 @@ import org.apache.spark.sql.execution.datasources.v2.clickhouse.metadata.{AddFil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SerializableConfiguration, SystemClock, Utils}
-
 import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import java.util.{Date, UUID}
+import scala.collection.mutable.ArrayBuffer
 
 object OptimizeTableCommandOverwrites extends Logging {
 
@@ -146,9 +145,10 @@ object OptimizeTableCommandOverwrites extends Logging {
 
   def runOptimizeBinJobClickhouse(
       txn: OptimisticTransaction,
-      partitionValues: Map[String, String], // TODO
+      partitionValues: Map[String, String],
+      bucketNum : String,
       bin: Seq[AddFile],
-      maxFileSize: Long): Seq[FileAction] = { // TODO
+      maxFileSize: Long): Seq[FileAction] = {
     val tableV2 = ClickHouseTableV2.getTable(txn.deltaLog);
 
     val sparkSession = SparkSession.getActiveSession.get
@@ -169,6 +169,12 @@ object OptimizeTableCommandOverwrites extends Logging {
       Some(tableV2.partitionColumns.map(c => c + "=" + partitionValues(c)).mkString("/"))
     }
 
+    val bucketDir = if (tableV2.bucketOption.isEmpty){
+      None
+    } else {
+      Some(bucketNum)
+    }
+
     val description = TaskDescription.apply(
       txn.deltaLog.dataPath.toString,
       tableV2.dataBaseName,
@@ -186,7 +192,7 @@ object OptimizeTableCommandOverwrites extends Logging {
       serializableHadoopConf,
       jobIdInstant,
       partitionDir,
-      None
+      bucketDir
     )
     sparkSession.sparkContext.runJob(
       rddWithNonEmptyPartitions,
@@ -254,4 +260,47 @@ object OptimizeTableCommandOverwrites extends Logging {
     deltaLog
   }
 
+
+
+  def groupFilesIntoBinsClickhouse(
+                                  partitionsToCompact: Seq[((String, Map[String, String]), Seq[AddFile])],
+                                  maxTargetFileSize: Long): Seq[((String, Map[String, String]), Seq[AddFile])] = {
+    partitionsToCompact.flatMap {
+      case (partition, files) =>
+        val bins = new ArrayBuffer[Seq[AddFile]]()
+
+        val currentBin = new ArrayBuffer[AddFile]()
+        var currentBinSize = 0L
+
+        files.sortBy(_.size).foreach {
+          file =>
+            // Generally, a bin is a group of existing files, whose total size does not exceed the
+            // desired maxFileSize. They will be coalesced into a single output file.
+            // However, if isMultiDimClustering = true, all files in a partition will be read by the
+            // same job, the data will be range-partitioned and numFiles = totalFileSize / maxFileSize
+            // will be produced. See below.
+
+            // isMultiDimClustering is always false for Gluten Clickhouse for now
+            if (file.size + currentBinSize > maxTargetFileSize /*&& !isMultiDimClustering */) {
+              bins += currentBin.toVector
+              currentBin.clear()
+              currentBin += file
+              currentBinSize = file.size
+            } else {
+              currentBin += file
+              currentBinSize += file.size
+            }
+        }
+
+        if (currentBin.nonEmpty) {
+          bins += currentBin.toVector
+        }
+
+        bins
+          .map(b => (partition, b))
+          // select bins that have at least two files or in case of multi-dim clustering
+          // select all bins
+          .filter(_._2.size > 1 /*|| isMultiDimClustering*/)
+    }
+  }
 }

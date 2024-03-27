@@ -33,15 +33,15 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import java.net.URI
 import java.util.Date
 import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
 
 /**
  * Gluten overwrite Delta:
  *
  * This file is copied from Delta 2.2.0. It is modified to overcome the following issues:
- *   1. In Gluten, part is a directory, but VacuumCommand assumes part is a file. So we
- *      need some modifications to make it work.
+ *   1. In Gluten, part is a directory, but VacuumCommand assumes part is a file. So we need some
+ *      modifications to make it work.
  */
-
 
 /**
  * Vacuums the table by clearing all untracked files and folders within this table. First lists all
